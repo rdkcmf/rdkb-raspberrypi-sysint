@@ -1,0 +1,12 @@
+[Unit]
+Description=NPM installation of ws and q
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c '(/lib/rdk/npm.sh)'
+RemainAfterExit=yes
+
+StandardOutput=syslog+console
+
+[Install]
+WantedBy=multi-user.target
+
