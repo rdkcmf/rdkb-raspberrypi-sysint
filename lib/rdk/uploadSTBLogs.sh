@@ -49,7 +49,7 @@ if [ $FLAG -eq 0 ]; then
 fi
 
 # initialize the variables
-MAC=`getMacAddressOnly`
+MAC=`getErouterMacAddress`
 HOST_IP=`getIPAddress`
 dt=`date "+%m-%d-%y-%I-%M%p"`
 LOG_FILE=$MAC"_Logs_$dt.tgz"
@@ -67,9 +67,9 @@ prevUploadFlag=0
 
 if [ ! -d $PREV_LOG_PATH ]; then
       echo "The Previous Logs folder is missing" >> $LOG_PATH/dcmscript.log
-      if [ "true" != "$RDK_EMULATOR" ]; then
-      	    exit 0
-      else
+      #if [ "true" != "$RDK_EMULATOR" ]; then
+      #	    exit 0
+      #else
 
     	if [ ! -d $LOG_PATH ]; then mkdir -p $LOG_PATH; fi
    	if [ ! -d $LOG_PATH/PreviousLogs ]; then mkdir -p $LOG_PATH/PreviousLogs; fi
@@ -79,17 +79,17 @@ if [ ! -d $PREV_LOG_PATH ]; then
 	backupSystemLogFiles mv $LOG_PATH $PREV_LOG_PATH
         backupAppBackupLogFiles mv $LOG_PATH $PREV_LOG_PATH
 
-      fi
+      #fi
 else
-     if [ "true"  !=  "$RDK_EMULATOR" ]; then
-	echo ""
-     else
+     #if [ "true"  !=  "$RDK_EMULATOR" ]; then
+	#echo ""
+     #else
 
     	rm -rf $LOG_PATH/PreviousLogs_backup/*
 	backupSystemLogFiles mv $LOG_PATH $PREV_LOG_PATH
         backupAppBackupLogFiles mv $LOG_PATH $PREV_LOG_PATH
      	#cp $PREV_LOG_BACKUP_PATH/* $PREV_LOG_PATH/
-     fi
+     #fi
 fi
 
 backupAppLogs()                                                        
@@ -207,8 +207,8 @@ HttpLogUpload()
 
     CLOUD_URL=$UploadHttpLink
     #CLOUD_URL="$(UploadHttpLink)filename=$LOG_FILE"
-
-    CURL_CMD="curl -w '%{http_code}\n' -d \"filename=$1\" -o \"$FILENAME\" \"$CLOUD_URL\" --connect-timeout 10 -m 10"
+    
+    CURL_CMD="curl -w '%{http_code}\n' -F \"filename=@$1\" -o \"$FILENAME\" \"$CLOUD_URL\" --connect-timeout 10 -m 10"
     echo URL_CMD: $CURL_CMD
     ret= eval $CURL_CMD > $HTTP_CODE
     http_code=$(awk -F\" '{print $1}' $HTTP_CODE)
@@ -262,7 +262,7 @@ uploadLogOnReboot()
 	uploadLog=$1
 	echo "`/bin/timestamp` Sleeping for seven minutes " >> $LOG_PATH/dcmscript.log
 	if [ "true" != "$RDK_EMULATOR" ]; then
-	sleep 420
+	sleep 12
 	fi
 	echo "`/bin/timestamp` Done sleeping" >> $LOG_PATH/dcmscript.log
     ret=`ls $PREV_LOG_PATH/*.txt | wc -l`
@@ -290,11 +290,20 @@ uploadLogOnReboot()
 
 	if $uploadLog; then
 	    tar -zcvf $LOG_FILE * >> $LOG_PATH/dcmscript.log  2>&1
-		echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
-		sleep 60
-		tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
-		sleep 1
-		echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log 
+		#echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
+		#sleep 60
+		#tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
+		#sleep 1
+		#echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log 
+		 if [ "$UploadProtocol" == "HTTP" ];then
+                        echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $UploadHttpLink" >> $LOG_PATH/dcmscript.log
+                        HttpLogUpload $LOG_FILE
+                else
+                        echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
+                        tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
+                fi
+                sleep 60
+                echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log
 	fi
 	cd $PREV_LOG_PATH
     rm -rf $PREV_LOG_PATH/$LOG_FILE
