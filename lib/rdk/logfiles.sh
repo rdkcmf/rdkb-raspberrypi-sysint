@@ -22,6 +22,40 @@
 . /etc/include.properties
 . /etc/device.properties
 
+#RDK-B LOGS
+BootTimeLog="BootTime.log"
+BootTimeLogBackup="BootTime.log.*"
+speedtestLog="speedtest.log"
+speedtestLogBackup="speedtest.log.*"
+ArmConsolelog="ArmConsolelog.txt.0"
+ArmConsolelogBackup="ArmConsolelog.txt.*"
+Consolelog="Consolelog.txt.0"
+ConsolelogBackup="Consolelog.txt.*"
+LMlog="LM.txt.0"
+LMlogBackup="LM.txt.*"
+PAMlog="PAMlog.txt.0"
+PAMlogBackup="PAMlog.txt.*"
+PARODUSlog="PARODUSlog.txt.0"
+PARODUSlogBackup="PARODUSlog.txt.*"
+PSMlog="PSMlog.txt.0"
+PSMlogBackup="PSMlog.txt.*"
+TDMlog="TDMlog.txt.0"
+TDMlogBackup="TDMlog.txt.*"
+TR69log="TR69log.txt.0"
+TR69logBackup="TR69log.txt.*"
+WEBPAlog="WEBPAlog.txt.0"
+WEBPAlogBackup="WEBPAlog.txt.*"
+WiFilog="WiFilog.txt.0"
+WiFilogBackup="WiFilog.txt.*"
+FirewallDebug="FirewallDebug.txt"
+FirewallDebugBackup="FirewallDebug.txt.*"
+MnetDebug="MnetDebug.txt"
+MnetDebugBackup="MnetDebug.txt.*"
+wifihealthlog="wifihealth.txt"
+wifihealthBackup="wifihealth.txt.*"
+CRLog="CRlog.txt.0"
+CRLogBackup="CRlog.txt.*"
+
 xreLog="receiver.log"
 cecLog="cec_log.txt"
 cecLogsBackup="cec_log.txt.*"
@@ -418,6 +452,22 @@ backupAppBackupLogFiles()
      destn=$3
     
      if [ "$DEVICE_TYPE" != "mediaclient" ]; then
+	 moveFiles $opern $source $BootTimeLogBackup $destn
+ 	 moveFiles $opern $source $speedtestLogBackup $destn
+	 moveFiles $opern $source $ArmConsolelogBackup $destn
+	 moveFiles $opern $source $ConsolelogBackup $destn
+	 moveFiles $opern $source $PAMlogBackup $destn
+	 moveFiles $opern $source $PARODUSlogBackup $destn
+	 moveFiles $opern $source $PSMlogBackup $destn
+	 moveFiles $opern $source $TDMlogBackup $destn
+	 moveFiles $opern $source $TR69logBackup $destn
+	 moveFiles $opern $source $WEBPAlogBackup $destn
+	 moveFiles $opern $source $WiFilogBackup $destn
+	 moveFiles $opern $source $FirewallDebugBackup $destn
+	 moveFiles $opern $source $MnetDebugBackup $destn
+         moveFiles $opern $source $wifihealthBackup $destn
+	 moveFiles $opern $source $CRLogBackup $destn
+
          moveFiles $opern $source $riLogsBackup $destn
          moveFiles $opern $source $riLogsBackup1 $destn
 	 moveFiles $opern $source $ecmLogsBackup $destn
@@ -561,6 +611,25 @@ backupSystemLogFiles()
      operation=$1
      source=$2
      destn=$3
+
+     if [ -f $source/$BootTimeLog ] ; then $operation $source/$BootTimeLog $destn; fi
+     if [ -f $source/$speedtestLog ] ; then $operation $source/$speedtestLog $destn; fi
+     if [ -f $source/$ArmConsolelog ] ; then $operation $source/$ArmConsolelog $destn; fi
+     if [ -f $source/$Consolelog ] ; then $operation $source/$Consolelog $destn; fi
+     if [ -f $source/$LMlog ] ; then $operation $source/$LMlog $destn; fi
+     if [ -f $source/$PAMlog ] ; then $operation $source/$PAMlog $destn; fi
+     if [ -f $source/$PARODUSlog ] ; then $operation $source/$PARODUSlog $destn; fi
+     if [ -f $source/$PSMlog ] ; then $operation $source/$PSMlog $destn; fi
+     if [ -f $source/$TDMlog ] ; then $operation $source/$TDMlog $destn; fi
+     if [ -f $source/$TR69log ] ; then $operation $source/$TR69log $destn; fi
+     if [ -f $source/$WEBPAlog ] ; then $operation $source/$WEBPAlog $destn; fi
+     if [ -f $source/$WiFilog ] ; then $operation $source/$WiFilog $destn; fi
+     if [ -f $source/$FirewallDebug ] ; then $operation $source/$FirewallDebug $destn; fi
+     if [ -f $source/$MnetDebug ] ; then $operation $source/$MnetDebug $destn; fi 
+     if [ -f $source/$wifihealthlog ] ; then $operation $source/$wifihealthlog $destn; fi
+     if [ -f $source/$CRLog ] ; then $operation $source/$CRLog $destn; fi
+
+
      # generic Logs
      if [ -f $source/$systemLog ] ; then $operation $source/$systemLog $destn; fi
      if [ -f $source/$resetLog ] ; then $operation $source/$resetLog $destn; fi
