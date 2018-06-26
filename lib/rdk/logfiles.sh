@@ -467,6 +467,7 @@ backupAppBackupLogFiles()
 	 moveFiles $opern $source $MnetDebugBackup $destn
          moveFiles $opern $source $wifihealthBackup $destn
 	 moveFiles $opern $source $CRLogBackup $destn
+	 moveFiles $opern $source $LMlogBackup $destn
 
          moveFiles $opern $source $riLogsBackup $destn
          moveFiles $opern $source $riLogsBackup1 $destn
