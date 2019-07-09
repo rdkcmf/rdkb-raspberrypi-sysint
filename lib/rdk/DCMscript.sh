@@ -111,8 +111,8 @@ RETRY_DELAY=60
 ## RETRY COUNT
 RETRY_COUNT=3
 default_IP=$DEFAULT_IP
-upload_protocol='TFTP'
-upload_httplink='None'
+upload_protocol='HTTP'
+upload_httplink=$HTTP_UPLOAD_LINK
 
 #---------------------------------
 # Function declarations
@@ -212,7 +212,7 @@ sendHttpRequestToServer()
     #Create json string
 if [ "true" != "$RDK_EMULATOR" ]; then
     if [ "$DEVICE_TYPE" == "broadband" ]; then
-        JSONSTR='estbMacAddress='$(getErouterMacAddress)'&firmwareVersion='$(getFWVersion)'&env='$(getBuildType)'&model='$(getModel)'&ecmMacAddress='$(getECMMacAddress)
+        JSONSTR='estbMacAddress='$(getErouterMacAddress)'&firmwareVersion='$(getFWVersion)'&env='$(getBuildType)'&model='$(getModel)'&ecmMacAddress='$(getECMMacAddress)'&controllerId='$(getControllerId)'&channelMapId='$(getChannelMapId)'&vodId='$(getVODId)'&timezone='$zoneValue'&partnerId='comcast'&accountId='Unknown'&version=2'
     else
     JSONSTR='estbMacAddress='$(getEstbMacAddress)'&firmwareVersion='$(getFWVersion)'&env='$(getBuildType)'&model='$(getModel)'&ecmMacAddress='$(getECMMacAddress)'&controllerId='$(getControllerId)'&channelMapId='$(getChannelMapId)'&vodId='$(getVODId)
     fi
@@ -229,11 +229,7 @@ fi
         then
             URL="$URL?"
         fi
-if [ "true" != "$RDK_EMULATOR" ]; then		
     CURL_CMD="curl -w '%{http_code}\n' --connect-timeout $timeout -m $timeout -o  \"$FILENAME\" '$URL$JSONSTR'"
-else
-    CURL_CMD="curl -w '%{http_code}\n' --connect-timeout $timeout -m $timeout -o  \"$FILENAME\" '$URL'"
-fi
     echo "`/bin/timestamp` CURL_CMD: $CURL_CMD" >> $LOG_PATH/dcmscript.log
 
     # Execute curl command
@@ -334,7 +330,15 @@ do
                     fi
                     echo "`/bin/timestamp` count = $count. Sleeping $RETRY_DELAY seconds ..." >> $LOG_PATH/dcmscript.log
                     rm -rf $FILENAME $HTTP_CODE
-                    sleep $RETRY_DELAY
+                    if [ "$reboot_flag" == "1" ];then
+                        echo "Exiting script." >> $LOG_PATH/dcmscript.log
+                        echo 0 > $DCMFLAG
+                        exit 0
+                    fi
+                    echo " `/bin/timestamp` Executing $RDK_PATH/uploadSTBLogs.sh." >> $LOG_PATH/dcmscript.log
+                    nice sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 0 1 $upload_protocol $upload_httplink &
+                    echo 0 > $DCMFLAG
+                    exit 1
                 else
                     rm -rf $HTTP_CODE
                     if [ -f "/tmp/DCMSettings.conf" ]
