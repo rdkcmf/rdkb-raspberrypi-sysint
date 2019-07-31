@@ -27,49 +27,47 @@ cloudFWLocation=$2
 cloudFWFile=$3
 
                                         
-tftpDownload () {       
-                                                                           
- mkdir -p /extblock/tftpimage                                       
- cd /extblock/tftpimage                                             
- echo "set IPtable rules for tftp !!"                               
- iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp
- echo "cloudfile is:"$cloudFWFile                                           
- echo "cloudlocation is:"$cloudFWLocation                                   
- tftp -g  -r $cloudFWFile $cloudFWLocation                                  
- ret=$?                                                                     
-# if [ $ret -ne 0 ] ; then                                                   
-#    echo "TFTP image download for file $cloudFWFile failed." 
-# else                                                                       
-#    echo " $cloudFWFile TFTP Download Completed.!"             
-# fi                                                                
- mkdir checksum
- cp $cloudFWFile checksum/
- cd checksum
- echo "Doing additional check..."
- md5sum $cloudFWFile >> cloudFWFile_checksum.txt
+tftpDownload () {      
 
- echo "Downloading already deployed checksum file from server"
- check_sum=$(echo "$cloudFWFile" | cut -f 1 -d '.')
- tftp -g  -r ${check_sum}.txt $cloudFWLocation
-    
- echo "comparing checksum files..."
- cmp -s "${check_sum}.txt" "cloudFWFile_checksum.txt"
- checksum_ret=$?
- echo "return value from checksum:$checksum_ret"
-
+ mkdir -p /extblock/tftpimage                                             
+ cd /extblock/tftpimage                                                   
+ echo "set IPtable rules for tftp !!"                                     
+ iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp   
+ echo "cloudfile is:"$cloudFWFile                                         
+ echo "cloudlocation is:"$cloudFWLocation                                 
+ tftp -g  -r $cloudFWFile $cloudFWLocation                                
+ ret=$?                                                                   
+ sleep 30                                                                 
+ mkdir -p checksum                                                           
+ cd checksum                                                              
+ echo "Doing additional check..."                                         
+                                                                      
+                                                                             
+ echo "Downloading already deployed checksum file from server"               
+ check_sum=$(echo "$cloudFWFile" | cut -f 1 -d '.')                          
+echo "check file is " $check_sum                                             
+echo "tftp download checksum file"                                           
+tftp -g  -r ${check_sum}.txt $cloudFWLocation                                
+echo "comparing checksum files..."                                           
+cloudcs=`cat /extblock/tftpimage/checksum/${check_sum}.txt | cut -f 1 -d ' '`
+echo "cloudcs:cloud download md5sum file version is:"$cloudcs                
+devcs=`md5sum /extblock/tftpimage/rdk* | cut -f 1 -d " "`                    
+echo "devcs:image download checksum md5sum file version is:"$devcs           
+sleep 30                                                                     
+                                                                             
+if [ "$devcs" = "$cloudcs" ]; then                                           
+echo "md5sum matches !!"                                    
+ ret=0                                                                       
+else                                                                         
+echo "tftp file not downloaded properly"                                     
+ret=1                                                                        
+fi                                                                           
  echo "checksum verification done...coming back and deleting checksum folder"
- cd ..
- rm -rf checksum
-
- if [ $ret -eq 0 ] && [ $checksum_ret -eq 0 ]; then
-   echo " TFTP download completed successfully"
-   ret=0                                           
- else                                          
-   echo " TFTP Download Failed!"
-   ret=1
- fi
-
- return $ret                                                               
+  cd ..
+  rm -rf checksum
+                                                                             
+ return $ret                          
+                                                                           
 }  
 
 mkdir -p /extblock
