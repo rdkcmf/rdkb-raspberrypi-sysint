@@ -158,7 +158,7 @@ if [ "$file" == "*" ]
 then
 echo "Image is not present for upgrade"
 umount /extblock
-exit 0
+exit 1
 fi
 
 
