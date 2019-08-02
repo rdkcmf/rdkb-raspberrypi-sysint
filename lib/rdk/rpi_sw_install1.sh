@@ -29,45 +29,54 @@ cloudFWFile=$3
                                         
 tftpDownload () {      
 
- mkdir -p /extblock/tftpimage                                             
- cd /extblock/tftpimage                                                   
- echo "set IPtable rules for tftp !!"                                     
- iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp   
- echo "cloudfile is:"$cloudFWFile                                         
- echo "cloudlocation is:"$cloudFWLocation                                 
- tftp -g  -r $cloudFWFile $cloudFWLocation                                
- ret=$?                                                                   
- sleep 30                                                                 
- mkdir -p checksum                                                           
- cd checksum                                                              
- echo "Doing additional check..."                                         
-                                                                      
-                                                                             
- echo "Downloading already deployed checksum file from server"               
- check_sum=$(echo "$cloudFWFile" | cut -f 1 -d '.')                          
-echo "check file is " $check_sum                                             
-echo "tftp download checksum file"                                           
-tftp -g  -r ${check_sum}.txt $cloudFWLocation                                
-echo "comparing checksum files..."                                           
-cloudcs=`cat /extblock/tftpimage/checksum/${check_sum}.txt | cut -f 1 -d ' '`
-echo "cloudcs:cloud download md5sum file version is:"$cloudcs                
-devcs=`md5sum /extblock/tftpimage/rdk* | cut -f 1 -d " "`                    
-echo "devcs:image download checksum md5sum file version is:"$devcs           
-sleep 30                                                                     
-                                                                             
-if [ "$devcs" = "$cloudcs" ]; then                                           
-echo "md5sum matches !!"                                    
- ret=0                                                                       
-else                                                                         
-echo "tftp file not downloaded properly"                                     
-ret=1                                                                        
-fi                                                                           
+ mkdir -p /extblock/tftpimage
+ cd /extblock/tftpimage                                     
+ echo "set IPtable rules for tftp !!"   
+ iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp
+ echo "cloudfile is:"$cloudFWFile                                 
+ echo "cloudlocation is:"$cloudFWLocation                                
+
+ echo "Downloading already deployed checksum file from server $cloudFWFile"
+ mkdir -p checksum
+ cd checksum                                         
+ check_sum=$(echo "$cloudFWFile" | cut -f 1 -d '.')
+ check_sum_file="${check_sum}.txt"
+ echo "tftp download checksum file"                          
+ echo "checksum file to download is $check_sum_file"
+ tftp -g  -r $check_sum_file $cloudFWLocation
+ sleep 30
+
+ cd ..
+
+ echo "Downloading $cloudFWFile ..."
+
+ tftp -g  -r $cloudFWFile $cloudFWLocation
+ ret=$?                                                                 
+ sleep 30                                                        
+ echo "Doing additional check..."
+
+
+ echo "comparing checksum files..."
+ cloudcsfile_path="/extblock/tftpimage/checksum/$check_sum_file"
+ echo "checksum file to download with actual path is $cloudcsfile_path"
+ cloudcs=`cat $cloudcsfile_path | cut -f 1 -d ' '`
+ echo "cloudcs:cloud download md5sum file version is:$cloudcs"
+ devcs=`md5sum /extblock/tftpimage/rdk* | cut -f 1 -d " "`       
+ echo "devcs:image download checksum md5sum file version is:$devcs"
+                                   
+ if [ "$devcs" = "$cloudcs" ]; then
+  echo "md5sum matches !!"
+  ret=0
+ else                                     
+  echo "tftp file not downloaded properly"
+  ret=1
+ fi
+
  echo "checksum verification done...coming back and deleting checksum folder"
-  cd ..
-  rm -rf checksum
-                                                                             
- return $ret                          
-                                                                           
+ cd ..
+ rm -rf checksum                                                                 
+ return $ret
+                                                                    
 }  
 
 mkdir -p /extblock
@@ -149,6 +158,7 @@ mkdir -p /extblock/data_bkup_linux_bank1
 #tftp/scp the image to /extblock/image folder
 
 cd /extblock/tftpimage
+rm -rf checksum
 
 for file in *; do
     echo "Downloaded image to be upgrade is $file"
@@ -158,7 +168,7 @@ if [ "$file" == "*" ]
 then
 echo "Image is not present for upgrade"
 umount /extblock
-exit 0
+exit 1
 fi
 
 
