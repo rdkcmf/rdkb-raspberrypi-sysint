@@ -24,14 +24,21 @@
 #--------------------------------------------------------------------------------------------------
 
 
-partition_check_name=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f1 | tail -1`
+partition_check_name_block1=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f1 | tail -1`
+partition_check_name_block2=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f1 | head -n 1`
 
 echo "Checking available partition for bank switch and image upgrade... "
 
 # To Create P3 and P4 partition if not available
-if [ "$partition_check_name" = "/dev/mmcblk0p2" ]
+if [ "$partition_check_name_block1" = "/dev/mmcblk0p2" ] || [ "$partition_check_name_block2" = "/dev/mmcblk0p2" ]
 then
-        bank1_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | tail -1`
+        echo "Creating additional partitions for Bank1 and storage area, box will go for reboot..."
+        if [ "$partition_check_name_block1" = "/dev/mmcblk0p2" ]
+        then
+            bank1_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | tail -1`
+        else
+            bank1_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | head -n 1`
+        fi
         bank_offset=1
         size_offset=40960
         bank1_start=$((bank1_partition+bank_offset))
@@ -50,9 +57,8 @@ else
 
 # To Create Storage partition p4  if rootfs partition p3 is available
 
-    echo "Bank1 rootfs partition mmcblk0p3 is available"
-    
-    if [ "$partition_check_name" = "/dev/mmcblk0p3" ]
+    echo "Creating additional partition for storage area and box will go for reboot..."
+    if [ "$partition_check_name_block1" = "/dev/mmcblk0p3" ]
     then
         storage_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | tail -1`
         storage_offset=1
