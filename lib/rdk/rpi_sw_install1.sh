@@ -44,34 +44,43 @@ tftpDownload () {
  echo "tftp download checksum file"                          
  echo "checksum file to download is $check_sum_file"
  tftp -g  -r $check_sum_file $cloudFWLocation
- sleep 30
+ sleep 10
+ if [ ! -f $check_sum_file ]; then
+    echo "Sorry cloud checksum not downloaded from TFTP!!"
+    ret=1
+ fi
 
  cd ..
-
+ mkdir -p imagedwnld
+ cd imagedwnld
  echo "Downloading $cloudFWFile ..."
 
  tftp -g  -r $cloudFWFile $cloudFWLocation
- ret=$?                                                                 
- sleep 30                                                        
- echo "Doing additional check..."
-
-
- echo "comparing checksum files..."
- cloudcsfile_path="/extblock/tftpimage/checksum/$check_sum_file"
- echo "checksum file to download with actual path is $cloudcsfile_path"
- cloudcs=`cat $cloudcsfile_path | cut -f 1 -d ' '`
- echo "cloudcs:cloud download md5sum file version is:$cloudcs"
- devcs=`md5sum /extblock/tftpimage/rdk* | cut -f 1 -d " "`       
- echo "devcs:image download checksum md5sum file version is:$devcs"
-                                   
- if [ "$devcs" = "$cloudcs" ]; then
-  echo "md5sum matches !!"
-  ret=0
- else                                     
-  echo "tftp file not downloaded properly"
-  ret=1
+ #ret=$?
+ sleep 10
+ if [ "$(ls -A $pwd)" ]; then
+    echo "$pwd is not empty,image downloaded from tftp,lets check the md5sum file from cloud !!"
+    echo "Doing additional check..."
+    echo "comparing checksum files..."
+    cloudcsfile_path="/extblock/tftpimage/checksum/$check_sum_file"
+    echo "checksum file to download with actual path is $cloudcsfile_path"
+    cloudcs=`cat $cloudcsfile_path | cut -f 1 -d ' '`
+    echo "cloudcs:cloud download md5sum file version is:$cloudcs"
+    devcs=`md5sum /extblock/tftpimage/imagedwnld/rdk* | cut -f 1 -d " "`
+    echo "devcs:image download checksum md5sum file version is:$devcs"
+    if [ "$devcs" = "$cloudcs" ]; then
+      echo "md5sum matches !!"
+      ret=0
+   else
+      echo "tftp file not downloaded properly"
+      ret=1
+   fi
+   cd ..
+ else
+    echo "image itself not downloaded from TFTP,pls check tftp connection!!"
+    cd ..
+    ret=1
  fi
-
  echo "checksum verification done...coming back and deleting checksum folder"
  cd ..
  rm -rf checksum                                                                 
@@ -160,6 +169,7 @@ mkdir -p /extblock/data_bkup_linux_bank1
 cd /extblock/tftpimage
 rm -rf checksum
 
+cd imagedwnld 
 for file in *; do
     echo "Downloaded image to be upgrade is $file"
 done
