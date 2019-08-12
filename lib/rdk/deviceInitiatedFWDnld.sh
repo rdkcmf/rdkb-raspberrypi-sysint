@@ -355,21 +355,21 @@ invokeImageFlasher () {
 getServURL()
 {
     buildType=$(getBuildType)
-    CLOUD_URL=http://34.219.243.214:9092/xconf/swu/stb
+    CLOUD_URL=$CLOUDURL
     if [ -f $PERSISTENT_PATH/swupdate.conf ] && [ $buildType != "prod" ] ; then
         urlString=`grep -v '^[[:space:]]*#' $PERSISTENT_PATH/swupdate.conf`
         CLOUD_URL=$urlString
     else
         case $buildType in
         "prod" )
-            CLOUD_URL="http://34.219.243.214:9092/xconf/swu/stb";;   # Pdn server URL
+	    CLOUD_URL=$CLOUDURL;;
         "vbn" )
-            CLOUD_URL="http://34.219.243.214:9092/xconf/swu/stb";;   # VBN server URL
+            CLOUD_URL=$CLOUDURL;;
         "qa" )
             # QA server URL
-            CLOUD_URL="http://34.219.243.214:9092/xconf/swu/stb";;
+            CLOUD_URL=$CLOUDURL;;
         * )
-            CLOUD_URL="http://34.219.243.214:9092/xconf/swu/stb";;
+            CLOUD_URL=$CLOUDURL;;
         esac
     fi
     echo $CLOUD_URL

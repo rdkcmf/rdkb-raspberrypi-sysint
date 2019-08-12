@@ -101,7 +101,8 @@ else
       echo "No error in curl command and curl http code is:"$curl_http_code
 fi                           
 
-cloudFwVer=`cat /tmp/cloudurl.txt  | grep firmwareVersion | cut -d "," -f4  | cut -c20-70`
+cloudFwVer=`cat /tmp/cloudurl.txt | tr -d '\n' | sed 's/[{}]//g' | awk  '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed -r 's/\"\:(true)($)/\|true/gI' | sed -r 's/\"\:(false)($)/\|false/gI' | sed -r 's/\"\:(null)($)/\|\1/gI' | sed -r 's/\"\:([0-9]+)($)/\|\1/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep firmwareVersion | cut -d \| -f2`
+
 cloudfirmwareversion=$cloudFwVer
 echo "cloud version is "$cloudfirmwareversion
 echo "RPI version is "$currentVersion
@@ -110,7 +111,8 @@ activeBankpart=`sed -e "s/.*root=//g" /proc/cmdline | cut -d ' ' -f1 | cut -c14`
 echo "Active bank is:"$activeBankpart
 rpiimageModel=`cat /version.txt | grep imagename | cut -c11-14`
 echo "rpiimageModel in dev is :"$rpiimageModel
-cloudimageModel=`cat /tmp/cloudurl.txt  | grep firmwareVersion | cut -d "," -f4 | cut -c20-70 | cut -c1-4`
+cloudimageModel=`cat /tmp/cloudurl.txt | tr -d '\n' | sed 's/[{}]//g' | awk  '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed -r 's/\"\:(true)($)/\|true/gI' | sed -r 's/\"\:(false)($)/\|false/gI' | sed -r 's/\"\:(null)($)/\|\1/gI' | sed -r 's/\"\:([0-9]+)($)/\|\1/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep firmwareVersion | cut -d \| -f2 | cut -c1-4`
+
 echo "cloudimageModel  is :"$cloudimageModel
 nrparts=`ls -al /dev/mmcblk0p* | wc -l`
 
