@@ -24,9 +24,31 @@
 ##################################################################
 . /etc/include.properties
 
-if [ -f "$RDK_PATH/DCMscript.sh" ]
-then
-    sh $RDK_PATH/DCMscript.sh $1 $2 $3 $4 1 &
-else
-    echo "$RDK_PATH/DCMscript.sh file not found."
-fi
+                                                                         
+if [ -f "$RDK_PATH/DCMscript.sh" ]                                        
+then                                                                      
+    sh /lib/rdk/DCMscript.sh $DCM_LOG_SERVER $DCM_LOG_SERVER_URL $LOG_SERVER 0 1  >> /rdklogs/logs/telemetry.log &
+    sleep 10                                                                                                      
+    fileRetryCount=0                                                                                              
+    while [ $fileRetryCount -ne 37 ]                                                                              
+    do                                                                                                            
+       echo "Trying to check if rtl_json files exists ..."                                                        
+       if [ -f "/nvram/rtl_json.txt" ]; then                                                                      
+         echo "files exists !!!!..."                                                                              
+         #sh $RDK_PATH/DCMscript-log.sh $DCM_LOG_SERVER $DCM_LOG_SERVER_URL $LOG_SERVER 0 1  >> /rdklogs/logs/logupload.log &
+         delimnr=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | tr -dc ':' |wc -c`                     
+         echo "number of deli:"$delimnr                                                                                      
+         delimnr=$((delimnr - 1))                                                                                            
+         TFTPIP=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d ":" -f$delimnr | cut -d '"' -f 2`
+         echo "TFTPIP:"$TFTPIP                                                                                               
+         sh $RDK_PATH/uploadSTBLogs.sh $TFTPIP 1 1 1 0 0 &                                                                   
+         break                                                                                                               
+       else                                                                                                                  
+         echo "still file is not there sleep for 5 sec"$fileRetryCount                                                       
+         sleep 5                                                                                                             
+       fi                                                                                                                    
+       fileRetryCount=`expr $fileRetryCount + 1`                                                                             
+    done                                                                                                                     
+else                                                                                                                         
+    echo "$RDK_PATH/DCMscript.sh file not found."                                                                            
+fi                             
