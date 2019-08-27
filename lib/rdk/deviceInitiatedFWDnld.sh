@@ -225,7 +225,7 @@ sendTLSRequest()
     CURLHTTPRet=1
     echo "000" > $HTTP_CODE     # provide a default value to avoid possibility of an old value remaining
     if [ "$1" == "XCONF" ]; then
-        CURL_CMD="curl -w "%{http_code}" '$CLOUD_URL?eStbMac=$JSONSTR'  -o /rdklogs/logs/response.txt >> $HTTP_CODE "
+        CURL_CMD="curl -w "%{http_code}" '$CLOUD_URL$JSONSTR'  -o /rdklogs/logs/response.txt >> $HTTP_CODE "
         if [ "$BUILD_TYPE" != "prod" ]; then
            echo URL_CMD: $CURL_CMD
         else 

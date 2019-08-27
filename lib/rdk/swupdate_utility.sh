@@ -27,7 +27,7 @@
 . /etc/include.properties
 . /etc/device.properties
 
-CLOUD_URL=http://34.219.243.214:9092/xconf/swu/stb?eStbMac=
+CLOUD_URL=$CLOUDURL
 
 echo "Started executing swupdate_utility.sh and device type is :"$DEVICE_TYPE
 if [ "$DEVICE_TYPE" != "mediaclient" ]; then
