@@ -17,48 +17,71 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ##########################################################################
-##################################################################
-## Script to do Device Configuration Management
-## Updates the following information in the settop box 
-##    * Check Schedule
-##    * Check Log Upload Settings
-##    * Check Configuration
-## Author: Ajaykumar/Shakeel/Suraj
-##################################################################
+#
 
 . /etc/include.properties
 . /etc/device.properties
-. /etc/dcm.properties
-
-if [ "$DEVICE_TYPE" != "broadband" ]; then
-. /lib/rdk/snmpUtils.sh
+source /etc/log_timestamp.sh
+source /lib/rdk/getpartnerid.sh
+source /lib/rdk/getaccountid.sh
+# Enable override only for non prod builds
+if [ "$BUILD_TYPE" != "prod" ] && [ -f $PERSISTENT_PATH/dcm.properties ]; then
+      . $PERSISTENT_PATH/dcm.properties
 else
-. /lib/rdk/utils.sh
+      . /etc/dcm.properties
 fi
+
+if [ -f /lib/rdk/utils.sh ]; then 
+   . /lib/rdk/utils.sh
+fi
+
+if [ -f /etc/mount-utils/getConfigFile.sh ];then
+     . /etc/mount-utils/getConfigFile.sh
+fi
+SIGN_FILE="/tmp/.signedRequest_$$_`date +'%s'`"
+DIRECT_BLOCK_TIME=86400
+DIRECT_BLOCK_FILENAME="/tmp/.lastdirectfail_dcm"
+TFTP_SERVER_IP=/tmp/tftpip.txt
+export PATH=$PATH:/usr/bin:/bin:/usr/local/bin:/sbin:/usr/local/lighttpd/sbin:/usr/local/sbin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib:/lib
 
 if [ -z $LOG_PATH ]; then
-    LOG_PATH="/opt/logs/"
+    LOG_PATH="/rdklogs/logs"
 fi
+
 if [ -z $PERSISTENT_PATH ]; then
-    PERSISTENT_PATH="/tmp"
+    PERSISTENT_PATH="/nvram"
 fi
 
-export PATH=$PATH:/usr/bin:/bin:/usr/local/bin:/sbin:/usr/local/lighttpd/sbin:/usr/local/sbin
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/Qt/lib:/usr/local/lib
+TELEMETRY_PATH="$PERSISTENT_PATH/.telemetry"
+DCMFLAG="/tmp/.DCMSettingsFlag"
+DCM_LOG_FILE="$LOG_PATH/dcmscript.log"
+TELEMETRY_INOTIFY_FOLDER="/rdklogs/logs/"
+TELEMETRY_INOTIFY_EVENT="$TELEMETRY_INOTIFY_FOLDER/eventType.cmd"
+DCMRESPONSE="$PERSISTENT_PATH/DCMresponse.txt"
+TELEMETRY_TEMP_RESEND_FILE="/rdklogs/logs/.temp_resend.txt"
 
-reboot_flag=$4
+PEER_COMM_ID="/tmp/elxrretyt.swr"
 
+TELEMETRY_PREVIOUS_LOG_COMPLETE="/tmp/.telemetry_previous_log_done"
+TELEMETRY_PREVIOUS_LOG="/tmp/.telemetry_previous_log"
+MAX_PREV_LOG_COMPLETE_WAIT=12
 
-if [ $reboot_flag -eq 1 ] && [ -f /tmp/.standby ]; then
-     echo "`/bin/timestamp` Exiting from DCM activities since box is in standby.!"       
-     exit 0
-fi
-if [ "true" != "$RDK_EMULATOR" ]; then
-if [ $# -ne 5 ]
-then
-    echo "`/bin/timestamp` Argument does not match" >> $LOG_PATH/dcmscript.log
+IDLE_TIMEOUT=30
+
+# http header
+HTTP_HEADERS='Content-Type: application/json'
+## RETRY DELAY in secs
+RETRY_DELAY=60
+## RETRY COUNT
+RETRY_COUNT=3
+
+echo_t "Starting execution of DCMscript.sh"
+
+if [ $# -ne 5 ]; then
+    echo_t "Argument does not match"
+    echo 0 > $DCMFLAG
     exit 1
-fi
 fi
 
 . $RDK_PATH/utils.sh
@@ -70,12 +93,19 @@ echo "`/bin/timestamp` Starting execution of DCMscript.sh" >> $LOG_PATH/dcmscrip
 # URL
 URL=$2
 tftp_server=$3
+reboot_flag=$4
 checkon_reboot=$5
+touch $TFTP_SERVER_IP
+echo_t "URL: "$URL
+echo_t "DCM_TFTP_SERVER: "$tftp_server >> $TFTP_SERVER_IP
+echo_t "BOOT_FLAG: "$reboot_flag
+echo_t "CHECK_ON_REBOOT: "$checkon_reboot
+rm -f $TELEMETRY_TEMP_RESEND_FILE
 
- echo "`/bin/timestamp` URL: $URL" >> $LOG_PATH/dcmscript.log
- echo "`/bin/timestamp` DCM_TFTP_SERVER: $tftp_server" >> $LOG_PATH/dcmscript.log
- echo "`/bin/timestamp` REBOOT_FLAG: $reboot_flag" >> $LOG_PATH/dcmscript.log
- echo "`/bin/timestamp` CHECK_ON_REBOOT: $checkon_reboot" >> $LOG_PATH/dcmscript.log
+conn_str="Direct"
+first_conn=useDirectRequest
+sec_conn=useCodebigRequest
+CodebigAvailable=0
 
  
 if [ -f "/tmp/DCMSettings.conf" ]
@@ -93,7 +123,8 @@ then
     fi
 fi
 # File to save curl response 
-FILENAME="$PERSISTENT_PATH/DCMresponse.txt"
+#FILENAME="$PERSISTENT_PATH/DCMresponse.txt"
+TELE_HTTP_CODE="$PERSISTENT_PATH/telemetry_http_code"
 # File to save http code
 HTTP_CODE="$PERSISTENT_PATH/http_code"
 rm -rf $HTTP_CODE
@@ -102,16 +133,9 @@ current_cron_file="$PERSISTENT_PATH/cron_file.txt"
 # Tftpboot Server Ip
 echo TFTP_SERVER: $tftp_server >> $LOG_PATH/dcmscript.log
 # Timeout value
-timeout=10
-# http header
-HTTP_HEADERS='Content-Type: application/json'
-
-## RETRY DELAY in secs
-RETRY_DELAY=60
-## RETRY COUNT
-RETRY_COUNT=3
+timeout=30
 default_IP=$DEFAULT_IP
-upload_protocol='HTTP'
+upload_protocol='TFTP'
 upload_httplink=$HTTP_UPLOAD_LINK
 
 #---------------------------------
@@ -143,9 +167,9 @@ getECMMacAddress()
 ## Get Receiver Id
 getReceiverId()
 {
-    if [ -f "/opt/www/whitebox/wbdevice.dat" ]
+    if [ -f "$PERSISTENT_PATH/www/whitebox/wbdevice.dat" ]
     then
-        ReceiverId=`cat /opt/www/whitebox/wbdevice.dat`
+        ReceiverId=`cat $PERSISTENT_PATH/www/whitebox/wbdevice.dat`
         echo "$ReceiverId"
     else
         echo " "
@@ -170,307 +194,377 @@ getVODId()
     echo "15660"
 }
 
-## Process the responce and update it in a file DCMSettings.conf
-processJsonResponse()
-{   
-    if [ -f "$FILENAME" ]
-    then
-        OUTFILE='/tmp/DCMSettings.conf'
-        sed -i 's/,"urn:/\n"urn:/g' $FILENAME # Updating the file by replacing all ',"urn:' with '\n"urn:'
-        sed -i 's/{//g' $FILENAME    # Deleting all '{' from the file 
-        sed -i 's/}//g' $FILENAME    # Deleting all '}' from the file
-        echo "" >> $FILENAME         # Adding a new line to the file 
-
-        #rm -f $OUTFILE #delete old file
-        cat /dev/null > $OUTFILE #empty old file
-
-        while read line
-        do  
-            
-            # Parse the settings  by
-            # 1) Replace the '":' with '='
-            # 2) Delete all '"' from the value 
-            # 3) Updating the result in a output file
-            echo "$line" | sed 's/":/=/g' | sed 's/"//g' >> $OUTFILE 
-            #echo "$line" | sed 's/":/=/g' | sed 's/"//g' | sed 's,\\/,/,g' >> $OUTFILE
-
-        done < $FILENAME
-        
-        rm -rf $FILENAME #Delete the /opt/DCMresponse.txt
-    else
-        echo "$FILENAME not found." >> $LOG_PATH/dcmscript.log
-        return 1
+IsDirectBlocked()
+{
+    ret=0
+    if [ -f $DIRECT_BLOCK_FILENAME ]; then
+        modtime=$(($(date +%s) - $(date +%s -r $DIRECT_BLOCK_FILENAME)))
+        if [ "$modtime" -le "$DIRECT_BLOCK_TIME" ]; then
+            echo "DCM: Last direct failed blocking is still valid, preventing direct" >>  $DCM_LOG_FILE
+            ret=1
+        else
+            echo "DCM: Last direct failed blocking has expired, removing $DIRECT_BLOCK_FILENAME, allowing direct" >> $DCM_LOG_FILE
+            rm -f $DIRECT_BLOCK_FILENAME
+            ret=0
+        fi
     fi
+    return $ret
 }
 
-## Send Http request to the server
+# Get the configuration of codebig settings
+get_Codebigconfig()
+{
+   # If GetServiceUrl not available, then only direct connection available and no fallback mechanism
+   if [ -f /usr/bin/GetServiceUrl ]; then
+      CodebigAvailable=1
+   fi
+
+   if [ "$CodebigAvailable" -eq "1" ]; then
+       CodeBigEnable=`dmcli eRT getv Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.CodeBigFirst.Enable | grep true 2>/dev/null`
+   fi
+   if [ "$CodebigAvailable" -eq "1" ] && [ "x$CodeBigEnable" != "x" ] ; then
+      conn_str="Codebig"
+      first_conn=useCodebigRequest
+      sec_conn=useDirectRequest
+   fi
+
+   if [ "$CodebigAvailable" -eq 1 ]; then
+      echo_t "Xconf dcm : Using $conn_str connection as the Primary" >> $DCM_LOG_FILE
+   else
+      echo_t "Xconf dcm : Only $conn_str connection is available" >> $DCM_LOG_FILE
+   fi
+}
+
+# Direct connection Download function
+useDirectRequest()
+{
+    # Direct connection will not be tried if .lastdirectfail exists
+    IsDirectBlocked
+    if [ "$?" -eq "1" ]; then
+       return 1
+    fi
+   count=0
+   while [ "$count" -lt "$RETRY_COUNT" ] ; do    
+      echo_t " DCM connection type DIRECT"
+      CURL_CMD="curl -w '%{http_code}\n' --tlsv1.2 --interface $EROUTER_INTERFACE $addr_type --connect-timeout $timeout -m $timeout -o  \"$FILENAME\" '$HTTPS_URL$JSONSTR'"
+      echo_t "CURL_CMD: $CURL_CMD" >> $DCM_LOG_FILE
+      HTTP_CODE=`result= eval $CURL_CMD`
+      ret=$?
+
+      sleep 2
+      http_code=$(echo "$HTTP_CODE" | awk -F\" '{print $1}' )
+      [ "x$http_code" != "x" ] || http_code=0
+      echo_t "ret = $ret http_code: $http_code" >> $DCM_LOG_FILE
+
+    # log security failure
+      case $ret in
+        35|51|53|54|58|59|60|64|66|77|80|82|83|90|91)
+           echo_t "DCM Direct Connection Failure Attempt:$count - ret:$ret http_code:$http_code" >> $DCM_LOG_FILE
+           ;;
+      esac
+      if [ $http_code -eq 200 ]; then
+           echo_t "Direct connection success - ret:$ret http_code:$http_code" >> $DCM_LOG_FILE
+           return 0
+      elif [ $http_code -eq 404 ]; then 
+           echo "`Timestamp` Direct connection Received HTTP $http_code Response from Xconf Server. Retry logic not needed" >> $DCM_LOG_FILE
+           bypass_conn=1
+           return 0  # Do not return 1, if retry for next conn type is not to be done
+      else 
+           if [ "$ret" -eq 0 ]; then
+               echo_t "DCM Direct Connection Failure Attempt:$count - ret:$ret http_code:$http_code" >> $DCM_LOG_FILE
+           fi 
+           rm -rf $DCMRESPONSE
+      fi
+      count=$((count + 1))
+      sleep $RETRY_DELAY
+    done
+    echo_t "DCM :Retries for Direct connection exceeded " >> $DCM_LOG_FILE
+    [ "$CodebigAvailable" -ne "1" ] || [ -f $DIRECT_BLOCK_FILENAME ] || touch $DIRECT_BLOCK_FILENAME
+    return 1
+}
+
+# Codebig connection Download function        
+useCodebigRequest()
+{
+   # Do not try Codebig if CodebigAvailable != 1 (GetServiceUrl not there)
+   if [ "$CodebigAvailable" -eq "0" ] ; then
+       echo "DCM : Only direct connection Available" >> $DCM_LOG_FILE
+       return 1
+   fi
+   count=0
+   while [ "$count" -lt "$RETRY_COUNT" ] ; do    
+      SIGN_CMD="GetServiceUrl 3 \"$JSONSTR\""
+      eval $SIGN_CMD > $SIGN_FILE
+      CB_SIGNED_REQUEST=`cat $SIGN_FILE`
+      rm -f $SIGN_FILE
+      CURL_CMD="curl -w '%{http_code}\n' --tlsv1.2 --interface $EROUTER_INTERFACE $addr_type --connect-timeout $timeout -m $timeout -o  \"$FILENAME\" \"$CB_SIGNED_REQUEST\""
+      echo_t " DCM connection type CODEBIG at `echo "$CURL_CMD" | sed -ne 's#.*\(https:.*\)?.*#\1#p'`" >> $DCM_LOG_FILE
+      echo_t "CURL_CMD: `echo "$CURL_CMD" | sed -ne 's#oauth_consumer_key=.*#<hidden>#p'`" >> $DCM_LOG_FILE
+      HTTP_CODE=`result= eval $CURL_CMD`
+      curlret=$?
+      http_code=$(echo "$HTTP_CODE" | awk -F\" '{print $1}' )
+      [ "x$http_code" != "x" ] || http_code=0
+      echo_t "ret = $curlret http_code: $http_code" >> $DCM_LOG_FILE
+
+      # log security failure
+      case $curlret in
+          35|51|53|54|58|59|60|64|66|77|80|82|83|90|91)
+             echo_t "DCM Codebig Connection Failure Attempt: $count - ret:$curlret http_code:$http_code" >> $DCM_LOG_FILE
+             ;;
+        esac
+       if [ "$http_code" -eq 200 ]; then
+           echo_t "Codebig connection success - ret:$curlret http_code:$http_code" >> $DCM_LOG_FILE
+           return 0
+       elif [ "$http_code" -eq 404 ]; then
+           echo_t "DCM Codebig connection Received HTTP $http_code Response from Xconf Server. Retry logic not needed" >> $DCM_LOG_FILE
+           bypass_conn=1
+           return 0  # Do not return 1, if retry for next conn type is not to be done
+       else 
+             if [ "$curlret" -eq 0 ]; then
+                echo_t "DCM Codebig Connection Failure Attempt:$count - ret:$curlret http_code:$http_code" >> $DCM_LOG_FILE
+             fi
+              rm -rf $DCMRESPONSE
+       fi
+       count=$((count + 1))
+       sleep $RETRY_DELAY
+    done
+    echo_t "Retries for Codebig connection exceeded " >> $DCM_LOG_FILE
+    return 1
+}
+
 sendHttpRequestToServer()
 {
     resp=0
     FILENAME=$1
     URL=$2
-    #Create json string
-if [ "true" != "$RDK_EMULATOR" ]; then
-    if [ "$DEVICE_TYPE" == "broadband" ]; then
-        JSONSTR='estbMacAddress='$(getErouterMacAddress)'&firmwareVersion='$(getFWVersion)'&env='$(getBuildType)'&model='$(getModel)'&ecmMacAddress='$(getECMMacAddress)'&controllerId='$(getControllerId)'&channelMapId='$(getChannelMapId)'&vodId='$(getVODId)'&timezone='$zoneValue'&partnerId='comcast'&accountId='Unknown'&version=2'
-    else
-    JSONSTR='estbMacAddress='$(getEstbMacAddress)'&firmwareVersion='$(getFWVersion)'&env='$(getBuildType)'&model='$(getModel)'&ecmMacAddress='$(getECMMacAddress)'&controllerId='$(getControllerId)'&channelMapId='$(getChannelMapId)'&vodId='$(getVODId)
-    fi
-fi
-    #echo JSONSTR: $JSONSTR
-    
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib:/usr/local/lib
-    # Generate curl command
-    #CURL_CMD="curl -w '%{http_code}\n' --connect-timeout $timeout -m $timeout -data -o  \"$FILENAME\" $URL?$JSONSTR"
-	
-	last_char=`echo $URL | awk '$0=$NF' FS=`
-	
-	 if [ "$last_char" != "?" ]
-        then
-            URL="$URL?"
-        fi
-    CURL_CMD="curl -w '%{http_code}\n' --connect-timeout $timeout -m $timeout -o  \"$FILENAME\" '$URL$JSONSTR'"
-    echo "`/bin/timestamp` CURL_CMD: $CURL_CMD" >> $LOG_PATH/dcmscript.log
+    echo "filename--args in sendHttpRequestToServer-------"$FILENAME
+    echo "url---args in sendHttpRequestToServer------"$URL
+
+    estbMacAddress=`ifconfig erouter0 | grep HWaddr | cut -c39-55`
+    JSONSTR=$estbMacAddress
+    CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=RPI'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
+    echo "------CURL_CMD:"$CURL_CMD
 
     # Execute curl command
-    result= eval $CURL_CMD > $HTTP_CODE
-
+    result= eval $CURL_CMD > $TELE_HTTP_CODE
     #echo "Processing $FILENAME"
     sleep $timeout
-
+    echo "sleep for :------------------"$timeout
     # Get the http_code
-    http_code=$(awk -F\" '{print $1}' $HTTP_CODE)
-    ret=$?
-    echo "`/bin/timestamp` ret = $ret http_code: $http_code" >> $LOG_PATH/dcmscript.log
+    http_code=$(awk -F\" '{print $1}' /tmp/telehttpcode.txt)
+    #start of pokuru
+                                                                                                         
+if [ "$http_code" != "200" ]; then                                                               
+    #Added for retry - START                                                                          
+    rm -rf /tmp/telehttpcode.txt             
+    rm -rf $DCMRESPONSE                                                          
+                                                                                                      
+    xconfRetryCount=0                                                                                 
+    while [ $xconfRetryCount -ne 10 ]                                                                 
+    do                                                                                                
+        echo "Trying to Retry connection with XCONF server..."
+                                                                                                              
+        CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=RPI'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
+                                                                                                              
+        result= eval $CURL_CMD                                                                                
+                                                                                                              
+        http_code_retry=$(awk -F\" '{print $1}' /tmp/telehttpcode.txt)                                  
+                                                                                                              
+        if [ "$http_code_retry" != "200" ]; then                                                         
+            echo "Error in establishing communication with xconf server."                                     
+                        if [ $xconfRetryCount -ne 0 ]; then sleep 30; fi                                      
+                        rm -f /tmp/telehttpcode.txt                                                          
+                        rm -rf $DCMRESPONSE
+                                                                      
+        else                                                                                               
+                        echo "After retries...No error in curl command and curl http code is:"$http_code_retry
+                        resp=0
+                        break                                                                                      
+        fi                                                                                                 
+                                                                                                                   
+        xconfRetryCount=`expr $xconfRetryCount + 1`                                                                
+    done                                                                                                           
+    #Added for retry - END                                                                                         
+    #echo "Error from cloud exiting,check in upcoming reboot-------------"                                         
+    #exit 0                                                                                                        
+else                                                                                                               
+      echo "No error in curl command and curl http code is:"$http_code                                        
+fi     
+    #end of pokuru
+    echo "----------ret http_code:"$http_code
+    echo "----------ret http_code_retry:"$http_code_retry
 
-    if [ $ret -ne 0 -o $http_code -ne 200 ] ; then
-        echo "`/bin/timestamp` HTTP request failed" >> $LOG_PATH/dcmscript.log
-        rm -rf /tmp/DCMSettings.conf
-        resp=1
+    if [ $http_code -ne 200 ] ; then
+        if [ $http_code_retry -ne 200 ]; then
+           echo "curl HTTP request failed http_code :"$http_code
+           echo "curl HTTP request failed http_code_retry :"$http_code_retry
+           #pokuru rm -rf /tmp/DCMSettings.conf
+	    resp=1
+        fi 
     else
-        echo "`/bin/timestamp` HTTP request success. Processing response.." >> $LOG_PATH/dcmscript.log
-        # Process the JSON responce
-        processJsonResponse
-        stat=$?
-        echo "`/bin/timestamp` processJsonResponse returned $stat" >> $LOG_PATH/dcmscript.log
-        if [ "$stat" != 0 ] ; then
-            echo "`/bin/timestamp` Processing response failed." >> $LOG_PATH/dcmscript.log
-            rm -rf /tmp/DCMSettings.conf
-            resp=1
-        else
-            resp=0
-        fi
+        echo "curl HTTP request success. Processing response.."
+        resp=0
     fi
-    
-    echo "`/bin/timestamp` resp = $resp" >> $LOG_PATH/dcmscript.log
-    
+    echo "----------res:"$resp
     return $resp
 }
 
-#---------------------------------
-#        Main App
-#---------------------------------
+dropbearRecovery()
+{
+   dropbearPid=`ps | grep -i dropbear | grep "$ARM_INTERFACE_IP" | grep -v grep`
+   if [ -z "$dropbearPid" ]; then
+       echo "Dropbear instance is missing ... Recovering dropbear !!! " >> $DCM_LOG_FILE
+       DROPBEAR_PARAMS_1="/tmp/.dropbear/dropcfg1$$"
+       DROPBEAR_PARAMS_2="/tmp/.dropbear/dropcfg2$$"
+       if [ ! -d '/tmp/.dropbear' ]; then
+           echo "wan_ssh.sh: need to create dropbear dir !!! " >> $DCM_LOG_FILE
+           mkdir -p /tmp/.dropbear
+       fi
+       echo "wan_ssh.sh: need to create dropbear files !!! " >> $DCM_LOG_FILE
+       getConfigFile $DROPBEAR_PARAMS_1
+       getConfigFile $DROPBEAR_PARAMS_2
+       dropbear -r $DROPBEAR_PARAMS_1 -r $DROPBEAR_PARAMS_2 -E -s -p $ARM_INTERFACE_IP:22 &
+       sleep 2
+   fi
+   rm -rf /tmp/.dropbear/*
+}
+
+# Safe wait for IP acquisition
 loop=1
+counter=0
 while [ $loop -eq 1 ]
 do
-    if [ "true" != "$RDK_EMULATOR" ]; then
-	echo "Device Name is not RDK-EMU"
-	echo "Device Name = $DEVICE_NAME"
-        estbIp=`getIPAddress`
+    estbIp=`ifconfig erouter0 | grep -i inet | cut -d ":" -f2 | cut -d " " -f1`
+    if [ "X$estbIp" == "X" ]; then
+         echo_t "waiting for IP"
+         sleep 2
+         let counter++
     else
-	echo "Device Name is RDK_EMU"
-        estbIp=`ifconfig -a eth0 | grep inet | grep -v inet6 | tr -s " " | cut -d ":" -f2 | cut -d " " -f1`
+         echo "got IP in erouter0-------------------"
+         loop=0
     fi
-    if [ ! $estbIp ] ;then
-            #echo "waiting for IP ..."
-	        echo "`/bin/timestamp` Waiting for IP" >> $LOG_PATH/dcmscript.log
-            sleep 15
-    else
-            ret=1
-            if [ "$DEVICE_TYPE" != "mediclient" ] && [ "$estbIp" == "$default_IP" ] ; then
-                  ret=0
-            fi
-            count=0
-            while [ $ret -ne 0 ]
-            do
-                loop=0
-                echo "`/bin/timestamp` --------- box got an ip $estbIp" >> $LOG_PATH/dcmscript.log
-                #Checking the value of 'checkon_reboot'
-                #The value of 'checkon_reboot' will be 0, if the value of 'urn:settings:CheckOnReboot' is false in DCMSettings.conf
-                #The value of 'checkon_reboot' will be always 1, if DCMscript.sh is executing from cronjob
-                if [ $checkon_reboot -eq 1 ]
-                then
-                    sendHttpRequestToServer $FILENAME $URL
-                    ret=$?
-                    echo "`/bin/timestamp` sendHttpRequestToServer returned $ret" >> $LOG_PATH/dcmscript.log
-                else
-                    ret=0
-                    echo "`/bin/timestamp` sendHttpRequestToServer has not executed since the value of 'checkon_reboot' is $checkon_reboot" >> $LOG_PATH/dcmscript.log
-                fi                
-                #If sendHttpRequestToServer method fails
-                if [ $ret -ne 0 ]
-                then
-                    echo "`/bin/timestamp` Processing response failed." >> $LOG_PATH/dcmscript.log
-                    count=$((count + 1))
-                    if [ $count -ge $RETRY_COUNT ]
-                    then
-                        echo " `/bin/timestamp` $RETRY_COUNT tries failed. Giving up..." >> $LOG_PATH/dcmscript.log
-                        rm -rf $FILENAME $HTTP_CODE
-						
-						
-                        if [ "$reboot_flag" == "1" ];then
-                            echo "Exiting script." >> $LOG_PATH/dcmscript.log
-                            exit 0
-                        fi      
-                        
-                        echo " `/bin/timestamp` Executing $RDK_PATH/uploadSTBLogs.sh." >> $LOG_PATH/dcmscript.log
-						echo " `/bin/timestamp` TFTP SERVER = $tftp_server" >> $LOG_PATH/dcmscript.log
-                        nice sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 0 1 $upload_protocol $upload_httplink &
-                        exit 1
-                    fi
-                    echo "`/bin/timestamp` count = $count. Sleeping $RETRY_DELAY seconds ..." >> $LOG_PATH/dcmscript.log
-                    rm -rf $FILENAME $HTTP_CODE
-                    if [ "$reboot_flag" == "1" ];then
-                        echo "Exiting script." >> $LOG_PATH/dcmscript.log
-                        echo 0 > $DCMFLAG
-                        exit 0
-                    fi
-                    echo " `/bin/timestamp` Executing $RDK_PATH/uploadSTBLogs.sh." >> $LOG_PATH/dcmscript.log
-                    nice sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 0 1 $upload_protocol $upload_httplink &
-                    echo 0 > $DCMFLAG
-                    exit 1
-                else
-                    rm -rf $HTTP_CODE
-                    if [ -f "/tmp/DCMSettings.conf" ]
-                    then
-                        #---------------------------------------------------------
-                        upload_protocol=`cat /tmp/DCMSettings.conf | grep 'LogUploadSettings:UploadRepository:uploadProtocol' | cut -d '=' -f2`
-                        						
-						if [ -n "$upload_protocol" ]; then
-							echo "`/bin/timestamp` upload_protocol: $upload_protocol" >> $LOG_PATH/dcmscript.log
-						else
-							upload_protocol='TFTP'
-							echo "`/bin/timestamp` 'urn:settings:LogUploadSettings:Protocol' is not found in DCMSettings.conf, upload_protocol is TFTP" >> $LOG_PATH/dcmscript.log
-						fi
- 
- 
-						
-                        #---------------------------------------------------------
-                        if [ "$upload_protocol" = "HTTP" ]; then
-							upload_httplink=`cat /tmp/DCMSettings.conf | grep 'LogUploadSettings:UploadRepository:URL' | cut -d '=' -f2`
-							if [ -z "$upload_httplink" ]; then
-								echo "`/bin/timestamp` 'urn:settings:LogUploadSettings:Location' is not found in DCMSettings.conf, upload_httplink is 'None'" >> $LOG_PATH/dcmscript.log
-							else
-								echo "`/bin/timestamp` upload_httplink is $upload_httplink" >> $LOG_PATH/dcmscript.log
-							fi
-						fi
-                        #---------------------------------------------------------
-                        
-                        #Check the value of 'UploadOnReboot' in DCMSettings.conf
-			if [ "true" != "$RDK_EMULATOR" ]; then
-                        uploadCheck=`cat /tmp/DCMSettings.conf | grep 'urn:settings:LogUploadSettings:UploadOnReboot' | cut -d '=' -f2`
-			else
-			uploadCheck=true
-			fi
-                        if [ "$uploadCheck" == "true" ] && [ "$reboot_flag" == "0" ]        
-                        then
-                            # Execute /sysint/uploadSTBLogs.sh with arguments $tftp_server and 1
-                            echo "`/bin/timestamp` The value of 'UploadOnReboot' is 'true', executing script uploadSTBLogs.sh" >> $LOG_PATH/dcmscript.log
-    			    if [ "true" != "$RDK_EMULATOR" ]; then
-                            nice sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 1 1 $upload_protocol $upload_httplink &
-			    else
-                            sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 1 1 $upload_protocol $upload_httplink &
-			    fi
-                        elif [ "$uploadCheck" == "false" ] && [ "$reboot_flag" == "0" ]
-                        then
-                            # Execute /sysint/uploadSTBLogs.sh with arguments $tftp_server and 1
-                            echo "`/bin/timestamp` The value of 'UploadOnReboot' is 'false', executing script uploadSTBLogs.sh" >> $LOG_PATH/dcmscript.log
-                            nice sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 1 1 0 $upload_protocol $upload_httplink &
-                        fi
-                        cron=`cat /tmp/DCMSettings.conf | grep 'urn:settings:LogUploadSettings:UploadSchedule:cron' | cut -d '=' -f2`
-                        if [ -n "$cron" ]
-                        then
-                            # Dump existing cron jobs to a file
-                            crontab -l -c /var/spool/cron/ > $current_cron_file
-                            # Check whether any cron jobs are existing or not
-                            existing_cron_check=`cat $current_cron_file | tail -n 1`
-                            
-                            tempfile="$PERSISTENT_PATH/tempfile.txt"
-                            rm -rf $tempfile  # Delete temp file if existing
-                            if [ -n "$existing_cron_check" ]
-                            then
-                                dcm_cron_check=`grep -c 'uploadSTBLogs.sh' $current_cron_file`
-                                if [ $dcm_cron_check -eq 0 ]
-                                then
-                                    echo "$cron /bin/sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 0 1 0 $upload_protocol $upload_httplink" >> $tempfile
-                                fi
-                                
-                                while read line
-                                do
-                                    retval=`echo "$line" | grep 'uploadSTBLogs.sh'`
-                                    if [ -n "$retval" ]
-                                    then
-                                        echo "$cron /bin/sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 0 1 0 $upload_protocol $upload_httplink" >> $tempfile
-                                    else
-                                        echo "$line" >> $tempfile
-                                    fi
-                                done < $current_cron_file
-                            else
-                                # If no cron job exists, create one, with the value from DCMSettings.conf file
-                                echo "$cron /bin/sh $RDK_PATH/uploadSTBLogs.sh $tftp_server 0 1 0 $upload_protocol $    " >> $tempfile
-                            fi
-                            # Set new cron job from the file            
-                            crontab $tempfile -c /var/spool/cron/
-                            rm -rf $current_cron_file # Delete temp file
-                            rm -rf $tempfile          # Delete temp file
-                        else
-                            echo " `/bin/timestamp` Failed to read 'UploadSchedule:cron' from /tmp/DCMSettings.conf." >> $LOG_PATH/dcmscript.log
-                        fi
-
-                        cron=`cat /tmp/DCMSettings.conf | grep 'urn:settings:CheckSchedule:cron' | cut -d '=' -f2`
-                        if [ -n "$cron" ]
-                        then
-                            # Dump existing cron jobs to a file
-                            crontab -l -c /var/spool/cron/ > $current_cron_file
-                            # Check whether any cron jobs are existing or not
-                            existing_cron_check=`cat $current_cron_file | tail -n 1`
-                            
-                            tempfile="$PERSISTENT_PATH/tempfile.txt"
-                            rm -rf $tempfile  # Delete temp file if existing
-                            if [ -n "$existing_cron_check" ]
-                            then
-                                schedule_cron_check=`grep -c 'DCMscript.sh' $current_cron_file`
-                                if [ $schedule_cron_check -eq 0 ]
-                                then
-                                    echo "$cron /bin/sh $RDK_PATH/DCMscript.sh $tftp_server $URL $tftp_server 1 1" >> $tempfile
-                                fi
-                                
-                                while read line
-                                do
-                                    retval=`echo "$line" | grep 'DCMscript.sh'`
-                                    if [ -n "$retval" ]
-                                    then
-                                        echo "$cron /bin/sh $RDK_PATH/DCMscript.sh $tftp_server $URL $tftp_server 1 1" >> $tempfile
-                                    else
-                                        echo "$line" >> $tempfile
-                                    fi
-                                done < $current_cron_file
-                            else
-                                # If no cron job exists, create one, with the value from DCMSettings.conf file
-                                echo "$cron /bin/sh $RDK_PATH/DCMscript.sh  $tftp_server $URL $tftp_server 1 1" >> $tempfile
-                            fi
-                            # Set new cron job from the file
-                            crontab $tempfile -c /var/spool/cron/
-                            rm -rf $current_cron_file # Delete temp file
-                            rm -rf $tempfile          # Delete temp file
-                        else
-                            echo " `/bin/timestamp` Failed to read 'CheckSchedule:cron' from DCMSettings.conf." >> $LOG_PATH/dcmscript.log
-                        fi
-                    else
-                        echo "`/bin/timestamp` /tmp/DCMSettings.conf file not found." >> $LOG_PATH/dcmscript.log
-                    fi
-                fi
-            done
-    fi	
 done
 
+    ret=1
+    if [ "$estbIp" == "$default_IP" ] ; then
+	  ret=0
+    fi
+    if [ $checkon_reboot -eq 1 ]; then
+        echo "call sendHttpRequestToServer-------------------"
+	sendHttpRequestToServer $DCMRESPONSE $URL
+	ret=$?
+	echo_t "sendHttpRequestToServer returned "$ret
+    else
+	ret=0
+	echo_t "sendHttpRequestToServer has not executed since the value of 'checkon_reboot' is $checkon_reboot" >> $DCM_LOG_FILE
+    fi                
+
+        echo "after sendHttpRequestToServer-----sleep for 5 sec-------------"
+    sleep 5
+
+
+    if [ $ret -ne 0 ]; then
+        echo_t "Processing response failed." >> $DCM_LOG_FILE
+        rm -rf $FILENAME 
+        echo_t "count = $count. Sleeping $RETRY_DELAY seconds ..." >> $DCM_LOG_FILE
+        exit 1
+    fi
+
+    if [ "x$DCA_MULTI_CORE_SUPPORTED" == "xyes" ]; then
+            dropbearRecovery
+
+            isPeriodicFWCheckEnabled=`syscfg get PeriodicFWCheck_Enable`
+            if [ "$isPeriodicFirmwareEnabled" == "true" ]; then
+               echo "XCONF SCRIPT : Calling XCONF Client firmwareSched for the updated time"
+               sh /etc/firmwareSched.sh &
+            fi
+
+            isAxb6Device="no"
+            if [ "$MODEL_NUM" == "TG3482G" ]; then
+               isNvram2Mounted=`grep nvram2 /proc/mounts`
+               if [ "$isNvram2Mounted" == "" -a -d "/nvram/logs" ]; then
+                  isAxb6Device="yes"
+               fi
+            fi
+
+            if [ "x$isAxb6Device" == "xno" ]; then
+               # wait for telemetry previous log to be copied to atom
+               loop=1
+               while [ $loop -eq 1 ]
+               do
+                   if [ ! -f $TELEMETRY_PREVIOUS_LOG ]; then
+                        echo_t "waiting for previous log file" >> $DCM_LOG_FILE
+                        sleep 10
+                   else
+                        echo_t "scp previous logs from arm to atom done, so breaking loop" >> $DCM_LOG_FILE
+                        loop=0
+                   fi
+               done
+
+               ### Trigger an inotify event on ATOM 
+               echo "Telemetry run for previous log trigger to atom" >> $DCM_LOG_FILE
+               GetConfigFile $PEER_COMM_ID
+               ssh -I $IDLE_TIMEOUT -i $PEER_COMM_ID root@$ATOM_INTERFACE_IP "/bin/echo 'xconf_update' > $TELEMETRY_INOTIFY_EVENT" > /dev/null 2>&1
+               rm -f $PEER_COMM_ID
+
+            fi
+
+            # wait for telemetry previous log to be completed upto 2 mins . Avoid indefenite loops 
+            loop=1
+            count=0
+            while [ "$loop" = "1" ]
+            do
+                if [ ! -f $TELEMETRY_PREVIOUS_LOG_COMPLETE ]; then
+                     echo_t "waiting for previous log done file" >> $DCM_LOG_FILE
+                     sleep 10
+                     if [ $count -ge $MAX_PREV_LOG_COMPLETE_WAIT ]; then 
+                         echo_t "Max wait for previous log done file reached. Proceeding with new config from xconf " >> $DCM_LOG_FILE
+                         loop=0
+                     fi
+                else
+                   echo_t "Telemetry run for previous log done, so breaking loop" >> $DCM_LOG_FILE
+                   loop=0
+                fi
+                count=`expr $count + 1`
+            done
+
+            GetConfigFile $PEER_COMM_ID
+            scp -i $PEER_COMM_ID $DCMRESPONSE root@$ATOM_INTERFACE_IP:$PERSISTENT_PATH > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                scp -i $PEER_COMM_ID $DCMRESPONSE root@$ATOM_INTERFACE_IP:$PERSISTENT_PATH > /dev/null 2>&1
+            fi
+            echo "Signal atom to pick the XCONF config data $DCMRESPONSE and schedule telemetry !!! " >> $DCM_LOG_FILE
+            ## Trigger an inotify event on ATOM 
+            ssh -I $IDLE_TIMEOUT -i $PEER_COMM_ID root@$ATOM_INTERFACE_IP "/bin/echo 'xconf_update' > $TELEMETRY_INOTIFY_EVENT" > /dev/null 2>&1
+            rm -f $PEER_COMM_ID
+        else
+             echo "opensource platforms----------------------------"
+            
+			isPeriodicFWCheckEnabled=`syscfg get PeriodicFWCheck_Enable`
+  		    if [ "$isPeriodicFirmwareEnabled" == "true" ]; then
+			   echo "XCONF SCRIPT : Calling XCONF Client firmwareSched for the updated time"
+			   sh /etc/firmwareSched.sh &
+			fi
+             
+            # wait for telemetry previous log to be completed
+            loop=1
+            count=0
+            while [ "$loop" = "1" ]
+            do
+                 echo "TELEMETRY_PREVIOUS_LOG_COMPLETE--------------"$TELEMETRY_PREVIOUS_LOG_COMPLETE
+                if [ ! -f $TELEMETRY_PREVIOUS_LOG_COMPLETE ]; then
+                     echo_t "waiting for previous log done file"
+                     sleep 10
+                     if [ $count -ge $MAX_PREV_LOG_COMPLETE_WAIT ]; then 
+                         echo_t "Max wait for previous log done file reached. Proceeding with new config from xconf " 
+                         loop=0
+                     fi
+                else
+                   echo_t "Telemetry run for previous log done, so breaking loop"
+                   loop=0
+                fi
+                count=`expr $count + 1`
+            done
+             echo "before calling dca_utility  start of TELEMETRY LOGIC-----------------"
+            sh /lib/rdk/dca_utility.sh 1 &
+        fi

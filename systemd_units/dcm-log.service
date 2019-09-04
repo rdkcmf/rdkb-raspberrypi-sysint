@@ -29,7 +29,7 @@ EnvironmentFile=/etc/dcm.properties
 EnvironmentFile=-/opt/dcm.properties
 ExecStartPre=/bin/sh -c '/bin/touch /rdklogs/logs/dcmscript.log'
 ExecStartPre=/bin/sh -c 'if [ "$DEVICE_TYPE" == "mediaclient" ]; then echo "Not triggered" > /opt/loguploadstatus.txt; fi'
-ExecStart=/bin/sh -c '/lib/rdk/StartDCM.sh $DCM_LOG_SERVER $DCM_LOG_SERVER_URL $LOG_SERVER 0 $DCM_SCP_SERVER &'
+ExecStart=/bin/sh -c '/lib/rdk/StartDCM.sh >> /rdklogs/logs/telemetry.log &'
 RemainAfterExit=yes
 
 [Install]

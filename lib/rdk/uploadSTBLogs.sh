@@ -52,7 +52,7 @@ fi
 MAC=`getErouterMacAddress`
 HOST_IP=`getIPAddress`
 dt=`date "+%m-%d-%y-%I-%M%p"`
-LOG_FILE=$MAC"_Logs_$dt.tgz"
+LOG_FILE="$MAC_Logs_$dt.tgz"
 
 #MARKER_FILE=$MAC"_Logs_Marker_$dt.txt"
 VERSION="version.txt"
@@ -61,7 +61,7 @@ PREV_LOG_PATH="$LOG_PATH/PreviousLogs"
 PREV_LOG_BACKUP_PATH="$LOG_PATH/PreviousLogs_backup/"
 DCM_UPLOAD_LIST="$LOG_PATH/dcm_upload"
 
-echo "`/bin/timestamp` Build Type: $BUILD_TYPE Log file: $LOG_FILE TFTP Server: $TFTP_SERVER Protocol: $UploadProtocol UploadHttpLink: $UploadHttpLink" >> $LOG_PATH/dcmscript.log
+echo "Build Type: $BUILD_TYPE Log file: $LOG_FILE TFTP Server: $TFTP_SERVER Protocol: $UploadProtocol UploadHttpLink: $UploadHttpLink" >> $LOG_PATH/dcmscript.log
 
 prevUploadFlag=0
 
@@ -238,11 +238,11 @@ uploadDCMLogs()
 {
 
    cd $DCM_LOG_PATH
-   echo "`/bin/timestamp` Uploading Logs through DCM cron job" >> $LOG_PATH/dcmscript.log
+   echo " Uploading Logs through DCM cron job" >> $LOG_PATH/dcmscript.log
    modifyFileWithTimestamp $DCM_LOG_PATH >> $LOG_PATH/dcmscript.log  2>&1
    tar -zcvf $LOG_FILE * >> $LOG_PATH/dcmscript.log  2>&1
    sleep 60
-   echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log   
+   echo "Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log   
    
    retval=1
    
@@ -260,11 +260,11 @@ uploadDCMLogs()
 uploadLogOnReboot()
 {
 	uploadLog=$1
-	echo "`/bin/timestamp` Sleeping for seven minutes " >> $LOG_PATH/dcmscript.log
+	echo "Sleeping for seven minutes "
 	if [ "true" != "$RDK_EMULATOR" ]; then
 	sleep 12
 	fi
-	echo "`/bin/timestamp` Done sleeping" >> $LOG_PATH/dcmscript.log
+	echo "Done sleeping prev logpath "$PREV_LOG_PATH
     ret=`ls $PREV_LOG_PATH/*.txt | wc -l`
     if [ ! $ret ]; then 
          ret=`ls $PREV_LOG_PATH/*.log | wc -l` 
@@ -283,15 +283,20 @@ uploadLogOnReboot()
         mkdir -p $PERM_LOG_PATH                                             
 
         processLogsFolder $PREV_LOG_PATH $PERM_LOG_PATH	
-	fi
+     fi
+    echo "ckp100-------------prev log path-------------"$PREV_LOG_PATH
     cd $PREV_LOG_PATH
     rm $LOG_FILE
     modifyFileWithTimestamp $PREV_LOG_PATH >> $LOG_PATH/dcmscript.log  2>&1
 
+    echo "ckp101---------------------upload log-----"$uploadLog
+    ls  -al
+    sleep 30
 	if $uploadLog; then
+            echo "ckp101--------------------------"
 	    tar -zcvf $LOG_FILE * >> $LOG_PATH/dcmscript.log  2>&1
-		#echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
-		#sleep 60
+		echo "Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
+		sleep 60
 		#tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
 		#sleep 1
 		#echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log 
@@ -299,11 +304,11 @@ uploadLogOnReboot()
                         echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $UploadHttpLink" >> $LOG_PATH/dcmscript.log
                         HttpLogUpload $LOG_FILE
                 else
-                        echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
+                        echo "Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
                         tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
                 fi
                 sleep 60
-                echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log
+                echo "Done Uploading Logs" >> $LOG_PATH/dcmscript.log
 	fi
 	cd $PREV_LOG_PATH
     rm -rf $PREV_LOG_PATH/$LOG_FILE
@@ -311,7 +316,7 @@ uploadLogOnReboot()
     mkdir -p $PREV_LOG_BACKUP_PATH
 	if [ "$BUILD_TYPE" = "dev" ] || [ "$HDD_ENABLED" = "false" ]; then
 	
-		echo "`/bin/timestamp` Moving to Previous Logs Backup Folder " >> $LOG_PATH/dcmscript.log
+		echo "Moving to Previous Logs Backup Folder " >> $LOG_PATH/dcmscript.log
 		mv * $PREV_LOG_BACKUP_PATH
 	else
 		echo "`/bin/timestamp` Deleting from Previous Logs  Folder " >> $LOG_PATH/dcmscript.log
@@ -341,7 +346,7 @@ if [ $DCM_FLAG -eq 0 ] ; then
 else 
      if [ $FLAG -eq 1 ] ; then 
 	      if [ $UploadOnReboot -eq 1 ]; then	
-				echo "`/bin/timestamp` Uploading Logs with DCM UploadOnReboot set to true" >> $LOG_PATH/dcmscript.log
+				echo "Uploading Logs with DCM UploadOnReboot set to true" >> $LOG_PATH/dcmscript.log
 				echo "call uploadLogOnReboot"
 				uploadLogOnReboot true	
 		   
