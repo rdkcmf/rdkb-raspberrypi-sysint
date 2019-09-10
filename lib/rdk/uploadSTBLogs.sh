@@ -300,9 +300,31 @@ uploadLogOnReboot()
 		#tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
 		#sleep 1
 		#echo "`/bin/timestamp` Done Uploading Logs" >> $LOG_PATH/dcmscript.log 
-		 if [ "$UploadProtocol" == "HTTP" ];then
-                        echo "`/bin/timestamp` Uploading logs $LOG_FILE  onto $UploadHttpLink" >> $LOG_PATH/dcmscript.log
-                        HttpLogUpload $LOG_FILE
+                proUpdel=`cat /tmp/DCMSettings.conf | grep -i uploadRepository:uploadProtocol | tr -dc '"' |wc -c`
+                echo "number of proUPdel2:"$proUpdel
+                #proUpdel=$((proUpdel - 1))
+                uploadProtocolla=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d '"' -f$proUpdel`
+                echo "Upload protocol logupload is:"$uploadProtocolla
+		 if [ "$uploadProtocolla" != "TFTP" ];then
+                     echo "before HTTP log upload"
+		     HTTPLOGUPLOADURL=`cat /tmp/DCMSettings.conf | grep -i "urn:settings:LogUploadSettings:RepositoryURL" | cut -d "=" -f2`
+                     if [ "$HTTPLOGUPLOADURL" == "" ]; then
+                         echo "No HTTP URL configured in xconf,going with internal one !!"
+                         HTTPLOGUPLOADURL=$DCM_LA_SERVER_URL
+                     fi
+                     echo "HTTPLOGUPLOADURL:"$HTTPLOGUPLOADURL
+                     echo "upload log file is:"$LOG_FILE
+                     CURL_CMD="curl -w '%{http_code}\n' -F filename=@$PREV_LOG_PATH/$LOG_FILE '$HTTPLOGUPLOADURL' --connect-timeout 100 -m 100"
+                     #echo_t "CURL_CMD http proto log upload: $CURL_CMD" >> $DCM_LOG_FILE
+                     echo "------CURL_CMD2:"$CURL_CMD
+                     HTTP_CODE=`result= eval $CURL_CMD`
+                     http_code=$(echo $HTTP_CODE | cut -d "." -f 2)
+                     echo "http_code is :"$http_code
+                     if [ $http_code -eq 200 ] ; then
+                         echo "HTTP log upload succeded!!!!!!!!!!!!!!!!!"
+                     else
+                         echo "HTTP log upload failed!!!!!!!!!!!!!!!!!"
+                     fi
                 else
                         echo "Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
                         tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1

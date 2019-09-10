@@ -191,42 +191,91 @@ useDirectRequest()
        if [ "$?" -eq "1" ]; then
            return 1
        fi
-      echo_t "dca$2: Using Direct commnication"
-      echo "before TFTP load-----------"
-      delimnr=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | tr -dc ':' |wc -c`
-      echo "number of delim:"$delimnr
-      delimnr=$((delimnr - 1))
-      IP=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d ":" -f$delimnr | cut -d '"' -f 2`
-      echo "tftp ip is :"$IP
-      cd /nvram/
-      if [ -f "rtl_json.txt" ]; then
-         echo "rtl_json.txt available,going for tftp upload"
-         tftp -p -r rtl_json.txt $IP 
+       echo_t "dca$2: Using Direct commnication"
+       proUpdel=`cat /tmp/DCMSettings.conf | grep -i uploadRepository:uploadProtocol | tr -dc '"' |wc -c`
+       echo "number of proUPdel1:"$proUpdel
+       #proUpdel=$((proUpdel - 1))
+       uploadProtocoltel=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d '"' -f$proUpdel`
+       echo "Upload protocol telemetry is:"$uploadProtocoltel
+       if [ "$uploadProtocoltel" != "TFTP" ]; then
+           echo "before HTTP upload"
+           delimhttp=`cat /tmp/DCMSettings.conf | grep -i uploadRepository:uploadProtocol | tr -dc '"' |wc -c`
+           echo "number of httpdeli:"$delimhttp
+           delimhttp=$((delimhttp - 4))
+           HTTPURL=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d '"' -f$delimhttp`
+           if [ "$HTTPURL" == "" ]; then
+              echo "No HTTP URL configured in xconf,going with internal one !!"
+              HTTPURL=$DCM_HTTP_SERVER_URL
+           fi
+           echo "HTTPTELEMETRYURL:"$HTTPURL
+           CURL_CMD="curl --tlsv1.2 -w '%{http_code}\n' -H \"Accept: application/json\" -H \"Content-type: application/json\" -X POST -d @/nvram/rtl_json.txt 'http://34.219.243.214:81/xconf/telemetry_upload.php' --connect-timeout 30 -m 30"
+           echo "------CURL_CMD:"$CURL_CMD
+           HTTP_CODE=`result= eval $CURL_CMD`
+           http_code=$(echo "$HTTP_CODE" | awk -F\" '{print $1}' )
+           echo "http code in telemetry is :"$http_code
+            #curl --tlsv1.2 -w '%{http_code}\n' -H "Accept: application/json" -H "Content-type: application/json" -X POST -d @/nvram/hell.txt '$HTTPURL' -o "/nvram/dca_httpresult.txt" --connect-timeout 30 -m 30
+           if [ $http_code -eq 200 ]; then
+                 echo "HTTP telemetry curl upload succeded!!!!!!!!!!!!!!!!!"
+                 ret=0
+           else
+                 echo "HTTP telemetry curl upload failed!!!!!!!!!!!!!!!!!"
+                 ret=1
+           fi
+	   if [ $ret -eq 0 ]; then
+              echo_t "dca$2: Direct connection success - ret:$ret " >> $RTL_LOG_FILE
+              # Use direct connection for rest of the connections
+              conn_type_used="Direct"
+              cd ..
+              return 0
+           else
+              echo_t "dca$2: Direct Connection Failure - ret:$ret " >> $RTL_LOG_FILE
+              direct_retry=$(( direct_retry += 1 ))
+              if [ "$direct_retry" -ge "$DIRECT_RETRY_COUNT" ]; then
+              # .lastdirectfail will not be created for only direct connection
+              [ "$CodebigAvailable" -ne "1" ] || [ -f $DIRECT_BLOCK_FILENAME ] || touch $DIRECT_BLOCK_FILENAME
+             fi
+             sleep 10
+             cd ..
+             return 1
+           fi
       else
-         echo "No rtl_json.txt available,returning 1"
-         return 1
-      fi
-      ret=$?
-      echo $ret
-      sleep 10
+           echo "before TFTP load-----------"
+           delimnr=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | tr -dc ':' |wc -c`
+           echo "number of delim:"$delimnr
+           delimnr=$((delimnr - 1))
+           IP=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d ":" -f$delimnr | cut -d '"' -f 2`
+           echo "tftp ip is :"$IP
+           cd /nvram/
+           if [ -f "rtl_json.txt" ]; then
+              echo "rtl_json.txt available,going for tftp upload"
+              iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp
+              tftp -p -r rtl_json.txt $IP 
+           else
+              echo "No rtl_json.txt available,returning 1"
+              return 1
+           fi
+           ret=$?
+           echo $ret
+           sleep 10
 
-      echo_t "dca $2 : Direct Connection HTTP RESPONSE CODE : $http_code" >> $RTL_LOG_FILE
-      if [ $ret -eq 0 ]; then
-           echo_t "dca$2: Direct connection success - ret:$ret " >> $RTL_LOG_FILE
-           # Use direct connection for rest of the connections
-           conn_type_used="Direct"
-           cd ..
-           return 0
-      else
-        echo_t "dca$2: Direct Connection Failure - ret:$ret " >> $RTL_LOG_FILE
-        direct_retry=$(( direct_retry += 1 ))
-        if [ "$direct_retry" -ge "$DIRECT_RETRY_COUNT" ]; then
-           # .lastdirectfail will not be created for only direct connection 
-           [ "$CodebigAvailable" -ne "1" ] || [ -f $DIRECT_BLOCK_FILENAME ] || touch $DIRECT_BLOCK_FILENAME
-        fi
-        sleep 10
-        cd ..
-        return 1
+           echo_t "dca $2 : Direct Connection HTTP RESPONSE CODE : $http_code" >> $RTL_LOG_FILE
+           if [ $ret -eq 0 ]; then
+              echo_t "dca$2: Direct connection success - ret:$ret " >> $RTL_LOG_FILE
+              # Use direct connection for rest of the connections
+              conn_type_used="Direct"
+              cd ..
+              return 0
+           else
+              echo_t "dca$2: Direct Connection Failure - ret:$ret " >> $RTL_LOG_FILE
+              direct_retry=$(( direct_retry += 1 ))
+              if [ "$direct_retry" -ge "$DIRECT_RETRY_COUNT" ]; then
+              # .lastdirectfail will not be created for only direct connection 
+              [ "$CodebigAvailable" -ne "1" ] || [ -f $DIRECT_BLOCK_FILENAME ] || touch $DIRECT_BLOCK_FILENAME
+             fi
+             sleep 10
+             cd ..
+             return 1
+           fi
       fi
 }
 
