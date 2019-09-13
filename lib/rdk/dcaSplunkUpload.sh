@@ -208,7 +208,7 @@ useDirectRequest()
               HTTPURL=$DCM_HTTP_SERVER_URL
            fi
            echo "HTTPTELEMETRYURL:"$HTTPURL
-           CURL_CMD="curl --tlsv1.2 -w '%{http_code}\n' -H \"Accept: application/json\" -H \"Content-type: application/json\" -X POST -d @/nvram/rtl_json.txt 'http://34.219.243.214:81/xconf/telemetry_upload.php' --connect-timeout 30 -m 30"
+           CURL_CMD="curl --tlsv1.2 -w '%{http_code}\n' -H \"Accept: application/json\" -H \"Content-type: application/json\" -X POST -d @/nvram/rtl_json.txt '$HTTPURL' --connect-timeout 30 -m 30"
            echo "------CURL_CMD:"$CURL_CMD
            HTTP_CODE=`result= eval $CURL_CMD`
            http_code=$(echo "$HTTP_CODE" | awk -F\" '{print $1}' )
@@ -218,8 +218,27 @@ useDirectRequest()
                  echo "HTTP telemetry curl upload succeded!!!!!!!!!!!!!!!!!"
                  ret=0
            else
-                 echo "HTTP telemetry curl upload failed!!!!!!!!!!!!!!!!!"
-                 ret=1
+                 uploadRetryCount=0
+                 while [ $uploadRetryCount -lt 2 ]
+                 do
+                       echo "Trying to upload telemetry file..."
+                       CURL_CMD="curl --tlsv1.2 -w '%{http_code}\n' -H \"Accept: application/json\" -H \"Content-type: application/json\" -X POST -d @/nvram/rtl_json.txt '$HTTPURL' --connect-timeout 30 -m 30"
+                       HTTP_CODE=`result= eval $CURL_CMD`
+                       http_code_retry=$(echo "$HTTP_CODE" | awk -F\" '{print $1}' )
+                       echo "http code in telemetry is :"$http_code_retry
+                       if [ "$http_code_retry" != "200" ]; then
+                           echo "Error in uploading telemetry file"
+                       else
+                           echo "telemetry json upload succeded in retry"
+                           ret=0
+                           break
+                       fi
+                       uploadRetryCount=`expr $uploadRetryCount + 1`
+                 done
+                 if [ $uploadRetryCount -eq 2]; then
+                      ret=1
+                      echo "HTTP telemetry curl upload failed!!!!!!!!!!!!!!!!!"
+                 fi
            fi
 	   if [ $ret -eq 0 ]; then
               echo_t "dca$2: Direct connection success - ret:$ret " >> $RTL_LOG_FILE
@@ -256,6 +275,30 @@ useDirectRequest()
            fi
            ret=$?
            echo $ret
+           if [ "$ret" -eq 1 ]; then
+               tftpuploadRetryCount=0
+               while [ $tftpuploadRetryCount -lt 2 ]
+               do
+                   echo "Trying to upload telemetry file using tftp again..."
+                   tftp -p -r rtl_json.txt $IP
+                   ret=$?
+                   if [ "$ret" -eq 1 ]; then
+                     echo "error in uploading using tftp"
+                   else
+                     echo "tftp upload in retry succeded"
+                     ret=0
+                     break
+                   fi
+                   tftpuploadRetryCount=`expr $tftpuploadRetryCount + 1`
+               done
+               if [ "$tftpuploadRetryCount" -eq 2]; then
+                      ret=1
+                      echo "TFTP telemetry  upload failed!!!!!!!!!!!!!!!!!"
+               fi
+           else
+                echo "TFTP Telemetry succeded !!!"
+                ret=0
+           fi
            sleep 10
 
            echo_t "dca $2 : Direct Connection HTTP RESPONSE CODE : $http_code" >> $RTL_LOG_FILE
@@ -440,7 +483,9 @@ get_Codebigconfig
 direct_retry=0
 ##  2] Check for unsuccessful posts from previous execution in resend que.
 ##  If present repost either with appending to existing or as independent post
+echo "=============Telemetry has file only one upload======================="
 if [ -f $TELEMETRY_RESEND_FILE ] && [ "x$ignoreResendList" != "xtrue" ]; then
+    echo "=============Loop1======================="
     rm -f $TELEMETRY_TEMP_RESEND_FILE
     while read resend
     do
@@ -492,6 +537,6 @@ else
        rm -f $TELEMETRY_TEMP_RESEND_FILE
     fi
 fi
-rm -f $TELEMETRY_JSON_RESPONSE
+#rm -f $TELEMETRY_JSON_RESPONSE
 # PID file cleanup
 if [ ! -f /etc/os-release ];then pidCleanup; fi

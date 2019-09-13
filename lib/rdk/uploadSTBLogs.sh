@@ -323,14 +323,59 @@ uploadLogOnReboot()
                      if [ $http_code -eq 200 ] ; then
                          echo "HTTP log upload succeded!!!!!!!!!!!!!!!!!"
                      else
-                         echo "HTTP log upload failed!!!!!!!!!!!!!!!!!"
-                     fi
+                         loguploadRetryCount=0
+                         while [ $loguploadRetryCount -lt 2 ]
+                         do
+                             echo "Trying to upload log file..."
+                             CURL_CMD="curl -w '%{http_code}\n' -F filename=@$PREV_LOG_PATH/$LOG_FILE '$HTTPLOGUPLOADURL' --connect-timeout 100 -m 100"
+                             HTTP_CODE=`result= eval $CURL_CMD`
+                             http_code_la=$(echo $HTTP_CODE | cut -d "." -f 2)
+                             echo "http_code is :"$http_code_la
+                             if [ "$http_code_la" != "200" ]; then
+                                   echo "Error in uploading log file"
+                             else
+                                   echo "logupload succeded in retry"
+                                   break
+                             fi
+                             loguploadRetryCount=`expr $loguploadRetryCount + 1`
+                         done
+                             if [ $loguploadRetryCount -eq 2]; then
+                                 echo "HTTP log upload failed!!!!!!!!!!!!!!!!!"
+                             fi
+                      fi
                 else
                         echo "Uploading logs $LOG_FILE  onto $TFTP_SERVER" >> $LOG_PATH/dcmscript.log
                         tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
-                fi
+                        ret=$?
+                        echo $ret
+                        if [ "$ret" -eq 1 ]; then
+                             tftplauploadRetryCount=0
+                             while [ "$tftplauploadRetryCount" -lt 2 ]
+                             do
+                                echo "Trying to upload logs file using tftp again..."
+                                tftp -p  -r $LOG_FILE -l $LOG_FILE $TFTP_SERVER >> $LOG_PATH/dcmscript.log 2>&1
+                                ret=$?
+                                if [ "$ret" -eq 1 ]; then
+                                     echo "error in uploading logs using tftp"
+                                else
+                                     echo "tftp upload in retry logs succeded"
+                                     ret=0
+                                     break
+                                fi
+                                tftplauploadRetryCount=`expr $tftplauploadRetryCount + 1`
+                             done
+                             if [ "$tftlauploadRetryCount" -eq 2 ]; then
+                                ret=1
+                                echo "TFTP log  upload failed!!!!!!!!!!!!!!!!!"
+                             else
+                                echo "TFTP log upload succeded !!!"
+                                ret=0
+                             fi
+                       fi
+                 fi
                 sleep 60
-                echo "Done Uploading Logs" >> $LOG_PATH/dcmscript.log
+                echo "Done Uploading Logs and removing rtl_json.txt file"
+                rm -f $TELEMETRY_JSON_RESPONSE
 	fi
 	cd $PREV_LOG_PATH
     rm -rf $PREV_LOG_PATH/$LOG_FILE

@@ -360,7 +360,7 @@ if [ "$http_code" != "200" ]; then
     rm -rf $DCMRESPONSE                                                          
                                                                                                       
     xconfRetryCount=0                                                                                 
-    while [ $xconfRetryCount -ne 10 ]                                                                 
+    while [ $xconfRetryCount -lt 2 ]
     do                                                                                                
         echo "Trying to Retry connection with XCONF server..."
                                                                                                               
@@ -383,7 +383,14 @@ if [ "$http_code" != "200" ]; then
         fi                                                                                                 
                                                                                                                    
         xconfRetryCount=`expr $xconfRetryCount + 1`                                                                
-    done                                                                                                           
+    done
+    echo "xconf retry count is:"$xconfRetryCount
+    if [ $xconfRetryCount -eq 2 ]; then
+         echo "No xconf comm ,exiting script"
+         startdcmEnd=`ps -ef | grep -i "StartDCM.sh" | head -n 1`
+         kill -9 $startdcmEnd
+         exit 0
+    fi
     #Added for retry - END                                                                                         
     #echo "Error from cloud exiting,check in upcoming reboot-------------"                                         
     #exit 0                                                                                                        

@@ -25,12 +25,16 @@
 . /etc/include.properties
 
                                                                          
-if [ -f "$RDK_PATH/DCMscript.sh" ]                                        
-then                                                                      
+if [ -f "$RDK_PATH/DCMscript.sh" ]
+then
+    if [ -f "$TELEMETRY_JSON_RESPONSE" ]; then
+        echo "remove previous json resp"
+        rm -f $TELEMETRY_JSON_RESPONSE
+    fi
     sh /lib/rdk/DCMscript.sh $DCM_LOG_SERVER $DCM_LOG_SERVER_URL $LOG_SERVER 0 1  >> /rdklogs/logs/telemetry.log &
     sleep 10                                                                                                      
     fileRetryCount=0                                                                                              
-    while [ $fileRetryCount -ne 37 ]                                                                              
+    while [ $fileRetryCount -ne 120 ]
     do                                                                                                            
        echo "Trying to check if rtl_json files exists ..."                                                        
        if [ -f "/nvram/rtl_json.txt" ]; then                                                                      
