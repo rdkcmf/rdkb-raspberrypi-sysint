@@ -30,6 +30,7 @@ then
     if [ -f "$TELEMETRY_JSON_RESPONSE" ]; then
         echo "remove previous json resp"
         rm -f $TELEMETRY_JSON_RESPONSE
+        rm -f $PERSISTENT_PATH/*TELE*
     fi
     sh /lib/rdk/DCMscript.sh $DCM_LOG_SERVER $DCM_LOG_SERVER_URL $LOG_SERVER 0 1  >> /rdklogs/logs/telemetry.log &
     sleep 10                                                                                                      
