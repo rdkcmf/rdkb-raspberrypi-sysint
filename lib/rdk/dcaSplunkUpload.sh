@@ -268,7 +268,11 @@ useDirectRequest()
            if [ -f "rtl_json.txt" ]; then
               echo "rtl_json.txt available,going for tftp upload"
               iptables -t raw -I OUTPUT -j CT -p udp -m udp --dport 69 --helper tftp
-              tftp -p -r rtl_json.txt $IP 
+              RpiMacAddress=`ifconfig erouter0 | grep HWaddr | cut -c39-55`
+              extractVal=`echo $RpiMacAddress | sed -e 's/://g'`
+              dt=`date "+%m-%d-%y-%I-%M%p"`
+              cp /nvram/rtl_json.txt /nvram/$extractVal-TELE-$dt.json
+              tftp -p -r $extractVal-TELE-$dt.json $IP
            else
               echo "No rtl_json.txt available,returning 1"
               return 1
@@ -280,7 +284,7 @@ useDirectRequest()
                while [ $tftpuploadRetryCount -lt 2 ]
                do
                    echo "Trying to upload telemetry file using tftp again..."
-                   tftp -p -r rtl_json.txt $IP
+                   tftp -p -r $extractVal-TELE-$dt.json $IP
                    ret=$?
                    if [ "$ret" -eq 1 ]; then
                      echo "error in uploading using tftp"
