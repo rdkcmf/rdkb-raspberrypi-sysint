@@ -19,29 +19,47 @@
 */
 ?>
 ﻿<?php
-
 ini_set('upload_tmp_dir','/var/tmp/');
 $target = "/var/tmp/";
-//$key_dec="e0e0e0e0f1f1f1f1";
 $target = $target.basename($_FILES['file']['name']);
-//echo $target;
 if($_FILES["file"]["error"]>0){
 	echo "Return Code: ".$_FILES["file"]["error"];
 	exit;
 } else {
 		if(move_uploaded_file($_FILES['file']['tmp_name'], $target)){
 			exec('sh /lib/rdk/confPhp restore '.$target,$output,$return_restore);
-			//exec('openssl enc -des-ecb -K '.$key_dec.' -d -in '.$target.'.gz -out '.$target);
-			if ($return_restore==-1) echo "Error when to restore configuraion!";
-			else {
-				sleep(1);
-				do {
+			$key_dec=$_POST['decryption_key'];
+			$incorrect_key = "bad decrypt";
+			$incorrect_key1 = "error";
+			exec('openssl enc -d -aes-256-cbc -in /nvram/syscfg.enc -out /nvram/syscfg.db -k '.$key_dec.' 2>&1',$key_check,$return_var);
+			$key_check=print_r($key_check,true);
+			if (strpos($key_check,$incorrect_key) == false || strpos($key_check,$incorrect_key1) == false){
+				exec('openssl enc -d -aes-256-cbc -in /nvram/bbhm_bak_cfg.enc -out /nvram/bbhm_bak_cfg.xml -k '.$key_dec);
+                        	exec('openssl enc -d -aes-256-cbc -in /nvram/bbhm_cur_cfg.enc -out /nvram/bbhm_cur_cfg.xml -k '.$key_dec);
+                        	exec('openssl enc -d -aes-256-cbc -in /nvram/hostapd0.enc -out /nvram/hostapd0.conf -k '.$key_dec);
+                        	exec('openssl enc -d -aes-256-cbc -in /nvram/hostapd1.enc -out /nvram/hostapd1.conf -k '.$key_dec);
+				exec('echo "CONF_RECOVER_STATUS_NEED_REBOOT" > /tmp/confPhp.status');
+				if ($return_restore==-1) echo "Error when to restore configuraion!";
+				else {
 					sleep(1);
-					exec('sh /lib/rdk/confPhp status',$output,$return_var);
-				} while ($return_var==1);
+					do {
+						sleep(1);
+						exec('sh /lib/rdk/confPhp status',$output,$return_var);
+					} while ($return_var==1);
+				}
 			}
+			else{
+				exec('mv /nvram/syscfg.db.prev /nvram/syscfg.db');
+                		exec('mv /nvram/bbhm_cur_cfg.xml.prev /nvram/bbhm_cur_cfg.xml');
+                		exec('mv /nvram/bbhm_bak_cfg.xml.prev /nvram/bbhm_bak_cfg.xml');
+                		exec('mv /nvram/hostapd0.conf.prev /nvram/hostapd0.conf');
+                		exec('mv /nvram/hostapd1.conf.prev /nvram/hostapd1.conf');
+				$return_var="1";
+				echo "Please check the Secure key entered!";
+			}
+			exec('rm /nvram/syscfg.enc /nvram/bbhm_cur_cfg.enc /nvram/bbhm_bak_cfg.enc /nvram/hostapd0.enc /nvram/hostapd1.enc');
 		}
-		else { echo "Error when to restore configuraion!"; }
+		else { echo "Error when to restore configuration!"; }
 }
 ?>
 
@@ -62,6 +80,7 @@ if($_FILES["file"]["error"]>0){
 		switch ($return_var) {
 		case 1:
 			echo "<h3>Error, get restore status failure</h3>";
+			echo "<h3>$key_check</h3>";
 			break;
 		case 2:
 			echo "<h3>Need Reboot to restore the saved configuration.</h3>";

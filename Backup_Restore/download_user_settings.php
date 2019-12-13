@@ -30,9 +30,8 @@ case 2:
 	break;
 default:
 	$filename="backup.tar";
-	//$key_enc="e0e0e0e0f1f1f1f1";
+
 	exec('sh /lib/rdk/confPhp get '.$filename,$output,$return_save);
-	//exec('openssl enc -des-ecb -K '.$key_enc.' -in /tmp/'.$filename.' -out /tmp/'.$filename.'.gz');
 	if ($return_save==-1) echo "Error, get current configuration failure! Please try again";
 	else {
 		do {

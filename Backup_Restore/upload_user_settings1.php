@@ -72,6 +72,8 @@
 <body style="background-color: #ffffff;">
         <form enctype="multipart/form-data" action="upload_user_settings2.php" method="post">
                 <input id="id1" name="file" type="file" style="border: solid 1px;">   </input>
+		</br>
+		<label for="dec_key"><?php echo _("Secure key:")?></label> <input type="password" value="" name="decryption_key" id="dec_key" autocomplete="off" onblur="this.setAttribute('readonly', 'readonly');" onfocus="this.removeAttribute('readonly');" readonly/>
                 </br>
                 </br>
                 <input id="restoreBtn" type="button" value="Restore"> </input>
