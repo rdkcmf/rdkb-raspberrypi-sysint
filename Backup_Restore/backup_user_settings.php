@@ -50,12 +50,6 @@ function checkForRebooting() {
 	});
 }
 
-function popUp(URL) {
-        day = new Date();
-        id = day.getTime();
-        eval("page" + id + " = window.open(URL, '" + id + "', 'toolbar=0,scrollbars=0,location=0,statusbar=0,menubar=0,resizable=0,width=700,height=400,left = 320.5,top = 105');");
-}
-
 </script>
 <div id="content">
   	<h1>Troubleshooting > Backup User Settings</h1>
@@ -69,7 +63,7 @@ function popUp(URL) {
 	<div class="module forms" id="backup">
 		<h2>Backup User Settings</h2>
 		<div id="div1" class="form-row">
-                        <span class="readonlyLabel"><a href="#" class="btn" id="btn1" onClick="javascript:popUp('download_user_settings.php')" title="Backup User settings" style="text-transform : none;">BACKUP</a></span>
+			<span class="readonlyLabel"><a href="backup_enc_key.php?id=btn1" class="btn" title="Backup User settings" style="text-transform : none;">BACKUP</a></span>
                         <span class="value">Press "Backup User Settings" to save current user settings. <span style="padding-left:231px">All your current settings will be saved as a backup file in <span style="padding-left:231px">your local. </span></span></span>
                 </div>
 	</div> <!-- end .module -->
