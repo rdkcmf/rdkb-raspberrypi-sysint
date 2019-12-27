@@ -33,6 +33,7 @@
     <script type="text/javascript" src="./cmn/js/lib/jquery.alerts.js"></script>
         <script type="text/javascript" src="./cmn/js/lib/jquery.alerts.progress.js"></script>
 
+	<script src="//ajax.aspnetcdn.com/ajax/jquery.validate/1.9/jquery.validate.min.js"></script>
         <script type="text/javascript" src="./cmn/js/utilityFunctions.js"></script>
     <script type="text/javascript" src="./cmn/js/comcast.js"></script>
 
@@ -45,15 +46,16 @@ $(document).ready(function() {
                 rules: {
                         secure_key: {
                                 required: true
-                                ,alphanumeric: true
-                                ,maxlength: 20
-                                ,minlength: 8
+                                ,minlength: 5
                         }
                 },
                 submitHandler:function(form){
                         click_save();
                 }
 	});
+	$("#backup_secure").on("submit", function(){
+		$("#backup_secure").validate();
+ 	})
 	$("#cancel_key").click(function() {
                 window.location.href = "backup_user_settings.php";
         });
@@ -92,11 +94,11 @@ function popUp(URL) {
 		<h2>Secure Key</h2>
 		<h3>Enter secure key to backup files</h3>
 		<div class="form-row odd password">
-			<label for="secure_key"><?php echo _("Secure key:")?></label> <input type="password" value="" name="secure key" id="secure_key" autocomplete="off" onblur="this.setAttribute('readonly', 'readonly');" onfocus="this.removeAttribute('readonly');" readonly/>
+			<label for="secure_key"><?php echo _("Secure key:")?></label> <input type="password" value="" name="secure key" id="secure_key" autocomplete="off" minlength="5" required onblur="this.setAttribute('readonly', 'readonly');" onfocus="this.removeAttribute('readonly');" readonly/>
 		</div>
 	</div> <!-- end .module -->
 	<div class="form-row form-btn">
-		<input type="submit" class="btn confirm" value="<?php echo _("Save")?>"/>
+		<input type="submit" class="btn submit" value="<?php echo _("Save")?>"/>
                 <input id="cancel_key" type="reset" value="<?php echo _("Cancel")?>" class="btn alt" />
         </div>
 </form>
