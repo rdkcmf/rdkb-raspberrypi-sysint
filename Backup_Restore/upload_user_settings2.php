@@ -29,6 +29,10 @@ if($_FILES["file"]["error"]>0){
 		if(move_uploaded_file($_FILES['file']['tmp_name'], $target)){
 			exec('sh /lib/rdk/confPhp restore '.$target,$output,$return_restore);
 			$key_dec=$_POST['decryption_key'];
+			if($key_dec ==''){
+				echo "<script type='text/javascript'>alert('Please enter a valid secure key');window.location.href='upload_user_settings1.php';</script>";
+			}
+			else{
 			$incorrect_key = "bad decrypt";
 			$incorrect_key1 = "error";
 			exec('openssl enc -d -aes-256-cbc -in /nvram/syscfg.enc -out /nvram/syscfg.db -k '.$key_dec.' 2>&1',$key_check,$return_var);
@@ -39,13 +43,19 @@ if($_FILES["file"]["error"]>0){
                         	exec('openssl enc -d -aes-256-cbc -in /nvram/hostapd0.enc -out /nvram/hostapd0.conf -k '.$key_dec);
                         	exec('openssl enc -d -aes-256-cbc -in /nvram/hostapd1.enc -out /nvram/hostapd1.conf -k '.$key_dec);
 				exec('echo "CONF_RECOVER_STATUS_NEED_REBOOT" > /tmp/confPhp.status');
-				if ($return_restore==-1) echo "Error when to restore configuraion!";
+				if ($return_restore==-1) echo "Error when to restore configuration!";
 				else {
 					sleep(1);
 					do {
 						sleep(1);
 						exec('sh /lib/rdk/confPhp status',$output,$return_var);
 					} while ($return_var==1);
+				}
+				if($return_var == 2){
+					setStr("Device.X_CISCO_COM_DeviceControl.RebootDevice","Device",true);
+					echo "Rebooting...";
+					echo "<script>setTimeout(function(){ window.close();}, 5000);</script>";
+					echo "<p> <font color=red font face='arial' size='2pt'>This page will automatically close in 5 seconds</font> </p>";
 				}
 			}
 			else{
@@ -54,47 +64,11 @@ if($_FILES["file"]["error"]>0){
                 		exec('mv /nvram/bbhm_bak_cfg.xml.prev /nvram/bbhm_bak_cfg.xml');
                 		exec('mv /nvram/hostapd0.conf.prev /nvram/hostapd0.conf');
                 		exec('mv /nvram/hostapd1.conf.prev /nvram/hostapd1.conf');
-				$return_var="1";
-				echo "Please check the Secure key entered!";
+				echo "<script>type='text/javascript'>alert('Please check the secure key entered! Restore failure');window.location.href='upload_user_settings1.php';</script>";
 			}
 			exec('rm /nvram/syscfg.enc /nvram/bbhm_cur_cfg.enc /nvram/bbhm_bak_cfg.enc /nvram/hostapd0.enc /nvram/hostapd1.enc');
+			}
 		}
 		else { echo "Error when to restore configuration!"; }
 }
 ?>
-
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
-<!-- $Id: header.php 3167 2010-03-03 18:11:27Z slemoine $ -->
-
-<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
-<head>
-    <title>XFINITY</title>
-
-</head>
-<body>
-    <!--Main Container - Centers Everything-->
-	<div id="container">
-		<div id="main-content">
-		<?php
-		echo "<h3>target $target</h3>";
-		switch ($return_var) {
-		case 1:
-			echo "<h3>Error, get restore status failure</h3>";
-			echo "<h3>$key_check</h3>";
-			break;
-		case 2:
-			echo "<h3>Need Reboot to restore the saved configuration.</h3>";
-			setStr("Device.X_CISCO_COM_DeviceControl.RebootDevice","Device",true);
-			break;
-		case 3:
-			echo "<h3>Error, restore configuration failure!</h3>";
-			break;
-		default:
-			echo "<h3>Restore configuration Failure! Please try later. </h3>";
-			break;
-		}
-		?>
-		</div>
-	</div>
-</body>
-</html>
