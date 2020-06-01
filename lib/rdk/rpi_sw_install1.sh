@@ -88,6 +88,66 @@ tftpDownload () {
                                                                     
 }  
 
+httpDownload () {
+    echo "Inside httpdownlaod !!"
+    echo  "`Timestamp` Image download with http prtocol"
+    mkdir -p /extblock/httpimage
+    cd /extblock/httpimage
+    echo "cloudfile is:"$cloudFWFile                                 
+    echo "cloudlocation is:"$cloudFWLocation                                
+
+    echo "Downloading already deployed checksum file from server $cloudFWFile"
+    mkdir -p checksum
+    cd checksum
+    check_sum=$(echo "$cloudFWFile" | cut -f 1 -d '.')
+    check_sum_file="${check_sum}.txt"
+
+    echo "HTTP CURL URL is curl -w %{http_code} '$cloudFWLocation/$check_sum_file' -o '$check_sum_file'"
+    eval curl -w %{http_code} '$cloudFWLocation/$check_sum_file' -o '$check_sum_file'
+    sleep 10
+    if [ ! -f $check_sum_file ]; then
+        echo "Sorry cloud checksum not downloaded from HTTP!!"
+        ret=1
+    fi
+
+    cd ..
+    mkdir -p imagedwnld
+    cd imagedwnld
+    echo "Downloading $cloudFWFile ..."
+
+    echo "HTTP CURL URL is curl -w %{http_code} '$cloudFWLocation/$cloudFWFile' -o '$cloudFWFile'"
+    eval curl -w %{http_code} '$cloudFWLocation/$cloudFWFile' -o '$cloudFWFile'
+    sleep 10
+    if [ "$(ls -A $pwd)" ]; then
+          echo "$pwd is not empty,image downloaded from http,lets check the md5sum file from cloud !!"
+          echo "Doing additional check..."
+          echo "comparing checksum files..."
+          cloudcsfile_path="/extblock/httpimage/checksum/$check_sum_file"
+          echo "checksum file to download with actual path is $cloudcsfile_path"
+          cloudcs=`cat $cloudcsfile_path | cut -f 1 -d ' '`
+          echo "cloudcs:cloud download md5sum file version is:$cloudcs"
+          devcs=`md5sum /extblock/httpimage/imagedwnld/rdk* | cut -f 1 -d " "`
+          echo "devcs:image download checksum md5sum file version is:$devcs"
+          if [ "$devcs" = "$cloudcs" ]; then
+             echo "md5sum matches !!"
+             ret=0
+          else
+             echo "http file not downloaded properly"
+             ret=1
+          fi
+          cd ..
+    else
+          echo "image itself not downloaded from HTTP,pls check HTTP connection!!"
+          cd ..
+          ret=1
+    fi
+    echo "checksum verification done...coming back and deleting checksum folder"
+    cd ..
+    rm -rf checksum
+    return $ret
+    
+}
+
 mkdir -p /extblock
 mount /dev/mmcblk0p3 /extblock
 fs_chk_cnt=`df -T /dev/mmcblk0p3 | grep -c "ext4"`
@@ -116,7 +176,7 @@ else
     echo "File system available for partition mmcblk0p4"
 fi
 echo "cloud proto is :"$cloudProto
-if [ "$cloudProto" = "http" ] ; then                                      
+if [ $cloudProto -eq 2 ] ; then                                      
         protocol=2                                                
 else                                                                      
         protocol=1                                       
@@ -124,12 +184,25 @@ fi
 if [ $protocol -eq 1 ]; then
   tftpDownload
   ret=$?
+elif [ $protocol -eq 2 ]; then
+  httpDownload
+  ret=$?
+else
+  echo "Invalid Protocol"
 fi
 if [ $ret -ne 0 ]; then      
-	echo "tftp download failed & exiting !!"                                                   
+	if [ $protocol -eq 1 ]; then
+	     echo "tftp download failed & exiting !!"                                                   
+	elif [ $protocol -eq 2 ]; then
+	     echo "http download failed & exiting !!"
+	fi                                                   
         exit 1
 elif [ -f "$cloudFWFile" ]; then                                                                                                          
-        echo "$cloudFWFile Local Image Download Completed using TFTP protocol!"                                                   
+	if [ $protocol -eq 1 ]; then
+        	echo "$cloudFWFile Local Image Download Completed using TFTP protocol!"                                                   
+	elif [ $protocol -eq 2 ]; then
+        	echo "$cloudFWFile Local Image Download Completed using HTTP protocol!"
+	fi                                                   
         filesize=`ls -l $cloudFWFile |  awk '{ print $5}'`                                                                                    
         echo "Downloaded $cloudFWFile of size $filesize"                                                                          
     fi                                                     
@@ -166,7 +239,11 @@ mkdir -p /extblock/data_bkup_linux_bank1
 #mkdir /tmp/dirname
 #tftp/scp the image to /extblock/image folder
 
-cd /extblock/tftpimage
+if [ $protocol -eq 1 ]; then
+	cd /extblock/tftpimage
+elif [ $protocol -eq 2 ]; then
+	cd /extblock/httpimage
+fi
 rm -rf checksum
 
 cd imagedwnld 
@@ -331,7 +408,11 @@ rm -rf /extblock/rootfs*
 rm -rf /extblock/linux*
 rm -rf /extblock/bank*
 rm -f /extblock/sec*
-rm -rf /extblock/tftpimage/*
+if [ $protocol -eq 1 ]; then
+	rm -rf /extblock/tftpimage/*
+elif [ $protocol -eq 2 ]; then
+	rm -rf /extblock/httpimage/*
+fi
 #umount /extblock
 
 

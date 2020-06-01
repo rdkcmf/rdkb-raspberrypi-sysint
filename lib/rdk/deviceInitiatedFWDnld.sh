@@ -36,6 +36,9 @@ else
     if [ -f $RDK_PATH/snmpUtils.sh ];then
        . $RDK_PATH/snmpUtils.sh
     fi
+    if [ -f $RDK_PATH/utils.sh ]; then
+       . $RDK_PATH/utils.sh
+    fi
 fi
 
 mkdir -p /rdklogs/logs
@@ -86,6 +89,8 @@ curl_result=1
 DOWNLOAD_IN_PROGRESS="Download In Progress"
 UPGRADE_IN_PROGRESS="Flashing In Progress"
 dnldInProgressFlag="/tmp/.imageDnldInProgress"
+
+CAPABILITIES='&capabilities=RCDL&capabilities=supportsFullHttpUrl'
 
 if [ -z $LOG_PATH ]; then
     LOG_PATH="/rdklogs/logs/"
@@ -271,6 +276,24 @@ tftpDownload () {
     return $ret
 }
 
+httpDownload () {
+    echo "Inside httpdownlaod !!"
+    ret=1
+    echo  "`Timestamp` Image download with http prtocol"
+    echo "httpupgrade location is :"$UPGRADE_LOCATION 
+    echo "httpupgrade file is :"$UPGRADE_FILE 
+    mkdir -p /tmp/httpimage
+    cd /tmp/httpimage
+    echo "HTTP CURL URL is curl -w %{http_code} '$UPGRADE_LOCATION/$UPGRADE_FILE' -o '$UPGRADE_FILE'"
+    eval curl -w %{http_code} '$UPGRADE_LOCATION/$UPGRADE_FILE' -o '$UPGRADE_FILE'
+    ret=$?
+    if [ $ret -ne 0 ] ; then
+        echo " `Timestamp` HTTP image download for file $UPGRADE_FILE failed."
+    else
+        echo "`Timestamp` $UPGRADE_FILE HTTP Download Completed.!"
+    fi
+    return $ret
+}
 
 ## trigger image download to the box
 imageDownloadToLocalServer () {
@@ -468,12 +491,6 @@ processJsonResponse()
     echo "$cloudFWLocation" > /tmp/.xconfssrdownloadurl
     ipv4cloudFWLocation=$cloudFWLocation
     ipv6cloudFWLocation=`grep ipv6FirmwareLocation  $OUTPUT | cut -d \| -f2 | tr -d ' '`
-    if [ "$DisableForcedHttps" != "true" ] ; then
-        ipv6cloudFWLocation=`echo $ipv6cloudFWLocation | sed "s/http:/https:/g"`
-        cloudFWLocation=`echo $cloudFWLocation | sed "s/http:/https:/g"`
-    else
-        echo "`Timestamp` Ignore forcing to https URL"
-    fi
     cloudFWVersion=`grep firmwareVersion $OUTPUT | cut -d \| -f2`
     cloudUpGrDelay=`grep upgradeDelay $OUTPUT | cut -d \| -f2`
     cloudProto=`grep firmwareDownloadProtocol $OUTPUT | cut -d \| -f2`          # Get download protocol to be used
@@ -521,7 +538,8 @@ createJsonString () {
      estbMac=`ifconfig erouter0 | grep HWaddr | cut -c39-55`
    fi
    #Included additionalFwVerInfo and partnerId
-   JSONSTR=$estbMac
+   #JSONSTR=$estbMac
+   JSONSTR=''$estbMac'&model='$(getModel)''$CAPABILITIES''
    echo "Mac in jsonstr:"$JSONSTR
 }
 sendXCONFTLSRequest () {
