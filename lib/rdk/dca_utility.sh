@@ -386,20 +386,20 @@ scheduleCron()
 	if [ -n "$existing_cron_check" ]; then
 		rtl_cron_check=`grep -c 'dca_utility.sh' $current_cron_file`
 		if [ $rtl_cron_check -eq 0 ]; then
-			echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 0" >> $tempfile
+			echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 1" >> $tempfile
 		fi
 		while read line
 		do
 			retval=`echo "$line" | grep 'dca_utility.sh'`
 			if [ -n "$retval" ]; then
-				echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 0" >> $tempfile
+				echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 1" >> $tempfile
 			else
 				echo "$line" >> $tempfile
 			fi
 		done < $current_cron_file
 	else
 		# If no cron job exists, create one, with the value from DCMSettings.conf file
-		echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 0" >> $tempfile
+		echo "$cron nice -n 19 sh $RDK_PATH/dca_utility.sh 1" >> $tempfile
 	fi
 	# Set new cron job from the file
 	crontab $tempfile -c $CRON_SPOOL
@@ -520,6 +520,16 @@ if [ $triggerType -eq 3 ] ; then
     pidCleanup
     exit 0
 fi
+
+# Pull the settings from Telemetry server periodically
+estbMacAddress=`ifconfig erouter0 | grep HWaddr | cut -c39-55`
+JSONSTR=$estbMacAddress
+CURL_CMD="curl '$DCM_LOG_SERVER_URL?estbMacAddress=$JSONSTR&model=$MODEL_NAME' -o $DCMRESPONSE > /tmp/httpcode.txt"
+
+# Execute curl command
+result= eval $CURL_CMD
+sleep 5
+echo "sleep for :------------------$timeout"
 
 # Regenerate config only during boot-up and when there is an update
 if [ ! -f $SORTED_PATTERN_CONF_FILE ] || [ $triggerType -eq 1 -a ! -f $TELEMETRY_PREVIOUS_LOG ] ; then
