@@ -342,7 +342,7 @@ sendHttpRequestToServer()
 
     estbMacAddress=`ifconfig erouter0 | grep HWaddr | cut -c39-55`
     JSONSTR=$estbMacAddress
-    CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=RPI'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
+    CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=$MODEL_NAME'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
     echo "------CURL_CMD:"$CURL_CMD
 
     # Execute curl command
@@ -364,7 +364,7 @@ if [ "$http_code" != "200" ]; then
     do                                                                                                
         echo "Trying to Retry connection with XCONF server..."
                                                                                                               
-        CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=RPI'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
+        CURL_CMD="curl -w "%{http_code}" '$URL?estbMacAddress=$JSONSTR&model=$MODEL_NAME'  -o $DCMRESPONSE >> /tmp/telehttpcode.txt "
                                                                                                               
         result= eval $CURL_CMD                                                                                
                                                                                                               
