@@ -23,7 +23,7 @@
 # Partition Creation for bank1 and storage area
 #--------------------------------------------------------------------------------------------------
 
-
+. /etc/device.properties
 partition_check_name_block1=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f1 | tail -1`
 partition_check_name_block2=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f1 | head -n 1`
 
@@ -39,15 +39,21 @@ then
         else
             bank1_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | head -n 1`
         fi
+# Give Partition offset size in sector based. 
+#    1 sector = 512
+# for Ex : Allocating 1GB for partition 
+#    2GB = ( 1024 * 1024 * 1024 ) * 2
+#    sector size for 1GB = (1024*1024*1024)*2/512 = 4194304 sectors
+#    Finally need to give partition size offset is 4194304 for 1GB partiton allocation.	
         bank_offset=1
-        size_offset=40960
+        size_offset=$PART_SIZE_OFFSET
         bank1_start=$((bank1_partition+bank_offset))
         bank1_end=$((bank1_start+size_offset))
         echo "Creating Bank1 rootfs partition mmc0blkp3..."
         echo -e "\nn\np\n3\n$((bank1_start))\n$((bank1_end))\np\nw" | fdisk /dev/mmcblk0 
         storage_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | tail -1`
         storage_offset=1
-        size_offset=40960
+        size_offset=$PART_SIZE_OFFSET
         storage_start=$((storage_partition+storage_offset))
         storage_end=$((storage_start+size_offset))
         echo "Creating Storage partition mmc0blkp4..."
@@ -62,7 +68,7 @@ else
     then
         storage_partition=`fdisk /dev/mmcblk0 -l | tail -2 | tr -s ' ' | cut -d ' ' -f3 | tail -1`
         storage_offset=1
-        size_offset=40960
+        size_offset=$PART_SIZE_OFFSET
         storage_start=$((storage_partition+storage_offset))
         storage_end=$((storage_start+size_offset))
         echo "Creating Storage partition mmc0blkp4..."
