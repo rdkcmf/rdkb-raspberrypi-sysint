@@ -718,6 +718,27 @@ else
            else
               sh /lib/rdk/dcaSplunkUpload.sh &
            fi
+           proUpdel=`cat /tmp/DCMSettings.conf | grep -i uploadRepository:uploadProtocol | tr -dc '"' |wc -c`
+           echo "number of proUPdel:"$proUpdel
+           #proUpdel=$((proUpdel - 1))
+           uploadProto=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d '"' -f$proUpdel`
+           echo "Upload protocol is:"$uploadProto
+           if [ "$uploadProto" != "TFTP" ]; then
+             HTTPLOGUPLOADURL=`cat /tmp/DCMSettings.conf | grep -i "urn:settings:LogUploadSettings:RepositoryURL" | cut -d "=" -f2`
+             if [ "$HTTPLOGUPLOADURL" == "" ]; then
+                echo "No HTTP URL configured in xconf,going with internal one !!"
+                HTTPLOGUPLOADURL=$DCM_LA_SERVER_URL
+             fi
+             echo "HTTPURL:"$HTTPLOGUPLOADURL
+             sh $RDK_PATH/uploadSTBLogs.sh $HTTPLOGUPLOADURL 1 1 1 0 0 &
+           else
+             delimnr=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | tr -dc ':' |wc -c`
+             echo "number of deli:"$delimnr
+             delimnr=$((delimnr - 1))
+             TFTPIP=`cat /tmp/DCMSettings.conf | grep -i urn:settings:TelemetryProfile | cut -d ":" -f$delimnr | cut -d '"' -f 2`
+             echo "TFTPIP:"$TFTPIP
+             sh $RDK_PATH/uploadSTBLogs.sh $TFTPIP 1 1 1 0 0 &
+           fi
        fi
 fi
 
