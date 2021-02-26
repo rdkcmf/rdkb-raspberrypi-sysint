@@ -32,7 +32,6 @@ cd /lib/systemd/system
 comment_restart_parameter CcspCrSsp.service
 comment_restart_parameter CcspEthAgent.service
 comment_restart_parameter CcspLMLite.service
-comment_restart_parameter CcspPandMSsp.service
 comment_restart_parameter CcspTr069PaSsp.service
 comment_restart_parameter PsmSsp.service 
 comment_restart_parameter ccspwifiagent.service
