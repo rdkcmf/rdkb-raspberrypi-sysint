@@ -76,8 +76,8 @@ if [ ! -d $PREV_LOG_PATH ]; then
     	if [ ! -d $LOG_PATH/PreviousLogs_backup ]; then mkdir -p $LOG_PATH/PreviousLogs_backup; fi
     	rm -rf $LOG_PATH/PreviousLogs_backup/*
 
-	backupSystemLogFiles mv $LOG_PATH $PREV_LOG_PATH
-        backupAppBackupLogFiles mv $LOG_PATH $PREV_LOG_PATH
+	backupSystemLogFiles cp $LOG_PATH $PREV_LOG_PATH
+        backupAppBackupLogFiles cp $LOG_PATH $PREV_LOG_PATH
 
       #fi
 else
@@ -86,8 +86,8 @@ else
      #else
 
     	rm -rf $LOG_PATH/PreviousLogs_backup/*
-	backupSystemLogFiles mv $LOG_PATH $PREV_LOG_PATH
-        backupAppBackupLogFiles mv $LOG_PATH $PREV_LOG_PATH
+	backupSystemLogFiles cp $LOG_PATH $PREV_LOG_PATH
+        backupAppBackupLogFiles cp $LOG_PATH $PREV_LOG_PATH
      	#cp $PREV_LOG_BACKUP_PATH/* $PREV_LOG_PATH/
      #fi
 fi
