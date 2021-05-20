@@ -21,6 +21,10 @@
 
 . /etc/include.properties
 . /etc/device.properties
+if [ -f /etc/telemetry2_0.properties ]; then
+    . /etc/telemetry2_0.properties
+fi
+
 source /etc/log_timestamp.sh
 source /lib/rdk/getpartnerid.sh
 source /lib/rdk/getaccountid.sh
@@ -53,16 +57,19 @@ if [ -z $PERSISTENT_PATH ]; then
     PERSISTENT_PATH="/nvram"
 fi
 
+T2_XCONF_PERSISTENT_PATH="$PERSISTENT_PATH/.t2persistentfolder"
+T2_BULK_PERSISTENT_PATH="$PERSISTENT_PATH/.t2reportprofiles"
 TELEMETRY_PATH="$PERSISTENT_PATH/.telemetry"
 DCMFLAG="/tmp/.DCMSettingsFlag"
 DCM_LOG_FILE="$LOG_PATH/dcmscript.log"
 TELEMETRY_INOTIFY_FOLDER="/rdklogs/logs/"
 TELEMETRY_INOTIFY_EVENT="$TELEMETRY_INOTIFY_FOLDER/eventType.cmd"
 DCMRESPONSE="$PERSISTENT_PATH/DCMresponse.txt"
+T2_RESPONSE="$T2_XCONF_PERSISTENT_PATH/DCMresponse.txt"
 TELEMETRY_TEMP_RESEND_FILE="/rdklogs/logs/.temp_resend.txt"
 
 PEER_COMM_ID="/tmp/elxrretyt.swr"
-
+FORMATTED_TMP_DCM_RESPONSE='/tmp/DCMSettings.conf'
 TELEMETRY_PREVIOUS_LOG_COMPLETE="/tmp/.telemetry_previous_log_done"
 TELEMETRY_PREVIOUS_LOG="/tmp/.telemetry_previous_log"
 MAX_PREV_LOG_COMPLETE_WAIT=12
@@ -332,6 +339,41 @@ useCodebigRequest()
     return 1
 }
 
+# Output file from this processing is used by :
+# 1] RFC module - RFCBase.sh
+# 2] Firmware upgrade module - firmwareSched.sh
+processJsonResponse()
+{
+    if [ -f "$DCMRESPONSE" ]
+    then
+        # Do not use persistent locations with inline stream edit operators
+        tmpConfigFile="/tmp/dcm$$.txt"
+        cp $DCMRESPONSE $tmpConfigFile
+        sed -i 's/,"urn:/\n"urn:/g' $tmpConfigFile            # Updating the file by replacing all ',"urn:' with '\n"urn:'
+        sed -i 's/^{//g' $tmpConfigFile                       # Delete first character from file '{'
+        sed -i 's/}$//g' $tmpConfigFile                       # Delete first character from file '}'
+        echo "" >> $tmpConfigFile                             # Adding a new line to the file
+        cat /dev/null > $FORMATTED_TMP_DCM_RESPONSE         # empty old file
+        while read line
+        do
+
+            # Parse the settings  by
+            # 1) Replace the '":' with '='
+            # 2) Updating the result in a output file
+            profile_Check=`echo "$line" | grep -ci 'TelemetryProfile'`
+            if [ $profile_Check -ne 0 ];then
+                echo "$line" | sed 's/"header":"/"header" : "/g' | sed 's/"content":"/"content" : "/g' | sed 's/"type":"/"type" : "/g' >> $FORMATTED_TMP_DCM_RESPONSE
+            else
+                echo "$line" | sed 's/":/=/g' | sed 's/"//g' >> $FORMATTED_TMP_DCM_RESPONSE
+            fi
+        done < $tmpConfigFile
+        rm -f $tmpConfigFile
+
+    else
+        echo "$DCMRESPONSE not found." >> $LOG_PATH/dcmscript.log
+    fi
+}
+
 sendHttpRequestToServer()
 {
     resp=0
@@ -435,6 +477,113 @@ dropbearRecovery()
    fi
    rm -rf /tmp/.dropbear/*
 }
+
+T2_ENABLE=`syscfg get T2Enable`
+# Safe wait for IP acquisition
+if [ “x$T2_enable” == “xfalse” ]; then
+    loop=1
+    counter=0
+    while [ $loop -eq 1 ]
+    do
+        estbIp=`getErouterIPAddress`   # This needs to be changed to wait for erouter IP address
+        if [ "X$estbIp" == "X" ]; then
+             echo_t "waiting for IP" >> $DCM_LOG_FILE
+             sleep 2
+             let counter++
+        else
+             loop=0
+        fi
+    done
+fi
+
+TELEMETRY_PATH_TEMP="$TELEMETRY_PATH/tmp"
+
+t2Log() {
+    timestamp=`date +%Y-%b-%d_%H-%M-%S`
+    echo "$0 : $timestamp $*" >> $T2_0_LOGFILE
+}
+
+# Check for RFC Telemetry.Enable settings
+# Internal syscfg database used by RFC parameter -  Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.Telemetry.Enable
+
+t2Log "RFC value for Telemetry 2.0 Enable is $T2_ENABLE ."
+
+if [ ! -f $T2_0_BIN ]; then
+    t2Log "Unable to find $T2_0_BIN ... Switching T2 Enable to false !!!"
+    T2_ENABLE="false"
+fi
+
+WAIT_COUNT=0
+MAX_PAMINIT_CHECK_TIMEOUT=30
+t2Log "Checking For PAM processes"
+while [ $WAIT_COUNT -lt $MAX_PAMINIT_CHECK_TIMEOUT ]
+do
+    if [ ! -f "/tmp/pam_initialized" ]; then
+        sleep 10
+        let WAIT_COUNT++
+    else
+        t2Log "PAM is Initilized"
+        break
+    fi
+done
+
+if [ "x$T2_ENABLE" == "xtrue" ]; then
+    t2Pid=`pidof $T2_0_APP`
+    if [ -z "$t2Pid" ]; then
+        echo "${T2_BIN} is present, XCONF config fetch and parse will be handled by T2 implementation" >> $DCM_LOG_FILE
+        t2Log "Clearing markers from $TELEMETRY_PATH"
+        rm -rf $TELEMETRY_PATH
+        mkdir -p $TELEMETRY_PATH
+        mkdir -p $TELEMETRY_PATH_TEMP
+        mkdir -p $T2_XCONF_PERSISTENT_PATH
+        t2Log "Starting $T2_0_BIN daemon."
+        ${T2_0_BIN}
+    else
+         mkdir -p $TELEMETRY_PATH_TEMP
+         t2Log "telemetry daemon is already running .. Trigger from maintenance window."
+         t2Log "Send signal 15 $T2_0_APP to restart for config fetch "
+         kill -15 $t2Pid
+    fi
+    ## Clear any dca_utility.sh cron entries if present from T1.1 previous execution
+    tempfile="/tmp/tempfile$$.txt"
+    rm -rf $tempfile  # Delete temp file if existing
+    crontab -l -c $CRON_SPOOL > $tempfile
+    # Check whether any cron jobs are existing or not
+    existing_cron_check=`cat $tempfile | tail -n 1`
+    if [ -n "$existing_cron_check" ]; then
+        rtl_cron_check=`grep -c 'dca_utility.sh' $tempfile`
+        if [ $rtl_cron_check -ne 0 ]; then
+            # delete entry
+            sed -i '/dca_utility/d' $tempfile
+            # Set new cron job from the file
+            crontab $tempfile -c $CRON_SPOOL
+        fi
+    fi
+    rm -rf $tempfile
+    # Refer to config downloaded from telemetry version 2.0 to avoid additional persistent storage usage
+    if [ ! -L $DCMRESPONSE ]; then
+        echo_t "Remove config from DCA $DCMRESPONSE and create symlink to $T2_RESPONSE" >> $DCM_LOG_FILE
+        # Clear persistent file from DCA execution
+        rm -f $DCMRESPONSE
+        touch $T2_RESPONSE
+        ln -s $T2_RESPONSE $DCMRESPONSE
+    fi
+        # Dependent modules should still get the parsed /tmp/DCMSettings.conf file
+        processJsonResponse
+
+    isPeriodicFWCheckEnabled=`syscfg get PeriodicFWCheck_Enable`
+    if [ "$isPeriodicFWCheckEnabled" == "true" ]; then
+        # bypassing firmwareSched.sh once on boot up because it is called from xconf
+        if [ ! -f $FWDL_FLAG ]; then
+            touch $FWDL_FLAG
+            echo_t "XCONF SCRIPT : Ignoring running firmwareSched.sh on bootup from dcm script" >> $DCM_LOG_FILE
+        else
+            echo_t "XCONF SCRIPT : Calling XCONF Client firmwareSched for the updated time" >> $DCM_LOG_FILE
+            sh /etc/firmwareSched.sh &
+        fi
+    fi
+    exit 0
+fi
 
 # Safe wait for IP acquisition
 loop=1
