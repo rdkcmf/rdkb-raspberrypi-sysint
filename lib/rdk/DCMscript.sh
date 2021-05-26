@@ -606,6 +606,18 @@ done
 	  ret=0
     fi
     if [ $checkon_reboot -eq 1 ]; then
+    # Clear response from telemetry 2.0 configs from persistent location with previous execution to avoid high persistent location usage
+    if [ -d "$T2_XCONF_PERSISTENT_PATH" ]; then
+        rm -rf $T2_XCONF_PERSISTENT_PATH
+    fi
+    if [ -d "$T2_BULK_PERSISTENT_PATH" ]; then
+        rm -rf $T2_BULK_PERSISTENT_PATH
+    fi
+    if [ -L "$DCMRESPONSE" ]; then
+        echo_t "Remove symbolic link from telemetry 2.0 execution " >> $DCM_LOG_FILE
+        rm -f $DCMRESPONSE
+    fi
+	    
         echo "call sendHttpRequestToServer-------------------"
 	sendHttpRequestToServer $DCMRESPONSE $URL
 	ret=$?
