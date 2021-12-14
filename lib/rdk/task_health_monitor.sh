@@ -640,7 +640,7 @@ case $SELFHEAL_TYPE in
         fi
 
         # Checking snmp v2 subagent PID
-        SNMP_PID=`ps -ww | grep snmp_subagent | grep -v cm_snmp_ma_2 | grep -v grep | awk '{print $1}'`
+        SNMP_PID=`ps ww | grep snmp_subagent | grep -v cm_snmp_ma_2 | grep -v grep | awk '{print $1}'`
         if [ "$SNMP_PID" = "" ]; then
             if [ -f /tmp/.snmp_agent_restarting ]; then
                 echo_t "[RDKB_SELFHEAL] : snmp process is restarted through maintanance window"
