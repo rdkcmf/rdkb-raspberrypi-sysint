@@ -9,3 +9,8 @@ cat /etc/key.pem > /etc/server.pem
 cat /etc/cert.pem >> /etc/server.pem
 rm /etc/key.pem /etc/cert.pem
 fi
+
+##### set the value of eth_wan_mac #####
+
+MACADDRESS=`ifconfig erouter0 | grep HWaddr | cut -d ' ' -f7`
+sysevent set eth_wan_mac $MACADDRESS
