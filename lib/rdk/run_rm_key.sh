@@ -11,6 +11,8 @@ rm /etc/key.pem /etc/cert.pem
 fi
 
 ##### set the value of eth_wan_mac #####
-
+WAN_INTERFACE=`ifconfig erouter0 | grep erouter0 | wc -l`
+if [ $WAN_INTERFACE -eq 1 ]; then
 MACADDRESS=`ifconfig erouter0 | grep HWaddr | cut -d ' ' -f7`
 sysevent set eth_wan_mac $MACADDRESS
+fi
